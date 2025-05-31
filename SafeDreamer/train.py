@@ -27,15 +27,25 @@ def main(argv=None):
 
   parsed, other = embodied.Flags(configs=['defaults']).parse_known(argv)
   config = embodied.Config(agt.Agent.configs['defaults'])
+  now_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+  
+  config = config.update({
+    'task': 'safetygym_SafetyPointGoal2-v0'
+  })
+  logdir_algo = "temp" # now_time + '_' + str(config.method) + '_' + str(config.task) + '_' + str(config.seed)
+  config = config.update({
+      'logdir': f'./logdir/{logdir_algo}-safedreamer'
+  })
   for name in parsed.configs:
     config = config.update(agt.Agent.configs[name])
   config = embodied.Flags(config).parse(other)
-  now_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-  logdir_algo = config.logdir + now_time + '_' + str(config.method) + '_' + str(config.task) + '_' + str(config.seed)
+  
+  # logdir_algo = config.logdir + now_time + '_' + str(config.method) + '_' + str(config.task) + '_' + str(config.seed)
+
   args = embodied.Config(
-      **config.run, logdir=logdir_algo, use_cost=config.use_cost,
-      batch_steps=config.batch_size * config.batch_length)
-  print(config)
+      **config.run, use_cost=config.use_cost,
+      batch_steps=config.batch_size * config.batch_length, logdir=config.logdir, task='safetygym_SafetyPointGoal2-v0')
+  
   os.environ['CUDA_VISIBLE_DEVICES'] = str(config.jax.logical_gpus)
 
   logdir = embodied.Path(logdir_algo)
@@ -118,7 +128,7 @@ def make_logger(parsed, logdir, step, config):
       embodied.logger.JSONLOutput(logdir, 'metrics.jsonl'),
       embodied.logger.JSONLOutput(logdir, 'scores.jsonl', 'episode/score|episode/cost'),
       embodied.logger.TensorBoardOutput(logdir),
-      # embodied.logger.WandBOutput(logdir, config),
+      embodied.logger.WandBOutput(logdir, config),
       # embodied.logger.MLFlowOutput(logdir.name),
   ], multiplier)
   return logger
@@ -164,6 +174,7 @@ def make_env(config, **overrides):
   # instance here. Environments with different interfaces can be converted
   # using `embodied.envs.from_gym.FromGym` and `embodied.envs.from_dm.FromDM`.
   suite, task = config.task.split('_', 1)
+  print('TASK: ',config.task)
   ctor = {
       'dummy': 'embodied.envs.dummy:Dummy',
       'gym': 'embodied.envs.from_gym:FromGym',
@@ -184,9 +195,11 @@ def make_env(config, **overrides):
     module = importlib.import_module(module)
     ctor = getattr(module, cls)
   kwargs = config.env.get(suite, {})
+  print(kwargs)
   kwargs.update(overrides)
   kwargs.update({'platform':config.jax.platform})
   env = ctor(task, **kwargs)
+  print('ENV used: ',env)
   return wrap_env(env, config)
 
 

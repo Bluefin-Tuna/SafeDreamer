@@ -10,3 +10,9 @@ ruamel.yaml==0.17.21
 opencv-python
 tensorflow
 tensorflow_probability
+#jaxlib
+
+
+chex
+cloudpickle
+einops

@@ -67,8 +67,17 @@ class Agent(nj.Module):
       expl_state['lagrange_d'] = obs['lagrange_d']
       task_state['lagrange_d'] = obs['lagrange_d']
     embed = self.wm.encoder(obs)
-    latent, _ = self.wm.rssm.obs_step(
+    embed_separate = self.wm.encoder_separate(obs)
+    latent, prior_orig = self.wm.rssm.obs_step(
         prev_latent, prev_action, embed, obs['is_first'])
+    total_newlat_separate = [latent]
+    total_out_separate = [prior_orig]
+    for ite, embed_y in enumerate(embed_separate):
+      new_lat, _ = self.wm.rssm.obs_step_separate(
+        prev_latent, prev_action, embed, obs['is_first'],  ite)
+      total_newlat_separate.append(new_lat)
+    # latent, _ = self.wm.rssm.compute_bayesian_surprise(total_newlat_separate, prior_orig)
+      # total_newlat_separate.append(newlat_separate)
     #self.expl_behavior.policy(latent, expl_state)
     task_outs, task_state = self.task_behavior.policy(latent, task_state)
     expl_outs, expl_state = self.expl_behavior.policy(latent, expl_state)
@@ -169,6 +178,7 @@ class WorldModel(nj.Module):
     shapes = {k: tuple(v.shape) for k, v in obs_space.items()}
     shapes = {k: v for k, v in shapes.items() if not k.startswith('log_')}
     self.encoder = nets.MultiEncoder(shapes, **config.encoder, name='enc')
+    self.encoder_separate = nets.SeparateEncoder(shapes, **config.encoder, name='enc_separate')
     self.rssm = nets.RSSM(**config.rssm, name='rssm')
     self.heads = {
         'decoder': nets.MultiDecoder(shapes, **config.decoder, name='dec'),
@@ -197,6 +207,7 @@ class WorldModel(nj.Module):
 
   def loss(self, data, state):
     embed = self.encoder(data)
+    embed_separate = self.encoder_separate(data)
     prev_latent, prev_action = state
     prev_actions = jnp.concatenate([
         prev_action[:, None], data['action'][:, :-1]], 1)
@@ -211,6 +222,14 @@ class WorldModel(nj.Module):
     losses = {}
     losses['dyn'] = self.rssm.dyn_loss(post, prior, **self.config.dyn_loss)
     losses['rep'] = self.rssm.rep_loss(post, prior, **self.config.rep_loss)
+    for ite, embed_y in enumerate(embed_separate):
+      # print(embed_y)
+      # print(embed)
+      # # sensor_id = np.array(ite)
+      # print(data['is_first'])
+      post_y_i, prior = self.rssm.observe_separate(embed_y, prev_actions, data['is_first'], ite, prev_latent)
+      losses[f'dyn_y_{ite}'] = self.rssm.dyn_loss(post, post_y_i,**self.config.dyn_loss)
+
     for key, dist in dists.items():
       if key == 'cost':
         condition = jnp.greater_equal(data['cost'], 1.0)

@@ -32,9 +32,9 @@ def main(argv=None):
   config = config.update({
     'task': 'safetygym_SafetyPointGoal2-v0'
   })
-  logdir_algo = "temp" # now_time + '_' + str(config.method) + '_' + str(config.task) + '_' + str(config.seed)
+  logdir_algo = now_time + '_' + str(config.method) + '_' + str(config.task) + '_' + str(config.seed)
   config = config.update({
-      'logdir': f'./logdir/{logdir_algo}-safedreamer'
+      'logdir': f'/logdir/{logdir_algo}-safedreamer'
   })
   for name in parsed.configs:
     config = config.update(agt.Agent.configs[name])

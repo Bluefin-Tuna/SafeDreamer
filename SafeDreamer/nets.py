@@ -62,6 +62,18 @@ class RSSM(nj.Module):
     prior = {k: swap(v) for k, v in prior.items()}
     return post, prior
 
+  def observe_separate(self, embed, action, is_first, sensor_id, state=None):
+    swap = lambda x: x.transpose([1, 0] + list(range(2, len(x.shape))))
+    if state is None:
+      state = self.initial(action.shape[0])
+    step = lambda prev, inputs: self.obs_step_separate(prev[0], *inputs, sensor_id=sensor_id)
+    inputs = swap(action), swap(embed), swap(is_first)
+    start = state, state
+    post, prior = jaxutils.scan(step, inputs, start, self._unroll)
+    post = {k: swap(v) for k, v in post.items()}
+    prior = {k: swap(v) for k, v in prior.items()}
+    return post, prior
+
   def imagine(self, action, state=None):
     swap = lambda x: x.transpose([1, 0] + list(range(2, len(x.shape))))
     state = self.initial(action.shape[0]) if state is None else state
@@ -100,6 +112,27 @@ class RSSM(nj.Module):
     post = {'stoch': stoch, 'deter': prior['deter'], **stats}
     return cast(post), cast(prior)
 
+  def obs_step_separate(self, prev_state, prev_action, embed, is_first, sensor_id): # We will use the original h_t.
+    is_first = cast(is_first)
+    prev_action = cast(prev_action)
+    if self._action_clip > 0.0:
+      prev_action *= sg(self._action_clip / jnp.maximum(
+          self._action_clip, jnp.abs(prev_action)))
+    prev_state, prev_action = jax.tree_util.tree_map(
+        lambda x: self._mask(x, 1.0 - is_first), (prev_state, prev_action))
+    prev_state = jax.tree_util.tree_map(
+        lambda x, y: x + self._mask(y, is_first),
+        prev_state, self.initial(len(is_first)))
+    prior = self.img_step_sg(prev_state, prev_action)
+    # print(prior['deter'], embed)
+    x = jnp.concatenate([prior['deter'], embed], -1)
+    x = self.get(f'obs_out_{sensor_id}', Linear, **self._kw)(x)
+    stats = self._stats(f'obs_stats_{sensor_id}', x)
+    dist = self.get_dist(stats)
+    stoch = dist.sample(seed=nj.rng())
+    post = {'stoch': stoch, 'deter': prior['deter'], **stats}
+    return cast(post), cast(prior)
+
   def img_step(self, prev_state, prev_action):
     prev_stoch = prev_state['stoch']
     prev_action = cast(prev_action)
@@ -121,6 +154,28 @@ class RSSM(nj.Module):
     stoch = dist.sample(seed=nj.rng())
     prior = {'stoch': stoch, 'deter': deter, **stats}
     return cast(prior)
+
+  def img_step_sg(self, prev_state, prev_action):
+    prev_stoch = prev_state['stoch']
+    prev_action = cast(prev_action)
+    if self._action_clip > 0.0:
+      prev_action *= sg(self._action_clip / jnp.maximum(
+          self._action_clip, jnp.abs(prev_action)))
+    if self._classes:
+      shape = prev_stoch.shape[:-2] + (self._stoch * self._classes,)
+      prev_stoch = prev_stoch.reshape(shape)
+    if len(prev_action.shape) > len(prev_stoch.shape):  # 2D actions.
+      shape = prev_action.shape[:-2] + (np.prod(prev_action.shape[-2:]),)
+      prev_action = prev_action.reshape(shape)
+    x = jnp.concatenate([prev_stoch, prev_action], -1)
+    x = self.get('img_in', Linear, **self._kw)(x)
+    x, deter = self._gru(x, prev_state['deter'])
+    x = self.get('img_out', Linear, **self._kw)(x)
+    stats = self._stats('img_stats', x)
+    dist = self.get_dist(stats)
+    stoch = dist.sample(seed=nj.rng())
+    prior = {'stoch': stoch, 'deter': deter, **stats}
+    return sg(cast(prior))
 
   def get_stoch(self, deter):
     x = self.get('img_out', Linear, **self._kw)(deter)
@@ -158,6 +213,33 @@ class RSSM(nj.Module):
 
   def _mask(self, value, mask):
     return jnp.einsum('b...,b->b...', value, mask.astype(value.dtype))
+
+  def compute_bayesian_surprise(self, total_newlat_separate, prior_orig, free=1.0):
+    # prior = self._prior(outs.get('feat', outs['deter']))
+    prior = self.get_dist(prior_orig)
+    batch_size = outs['deter'].shape[0]
+    best_surprise = jnp.full((batch_size,), jnp.inf)
+    best_i = 0
+    best_lat = newlat_separate[0]
+    for i, y_i_lat in enumerate(total_newlat_separate):
+      # y_i_post = y_i_out['logit']
+      surprise = self._dist(y_i_lat).kl_divergence(self._dist(prior))
+      print(surprise)
+
+      condition = best_surprise > surprise  # Shape (16,)
+
+      # Expand condition to match target shape (16, 4096)
+      expanded_condition_deter = jnp.broadcast_to(condition[:, None], y_i_lat['deter'].shape)
+      expanded_condition_stoch = jnp.broadcast_to(condition[:, None, None], y_i_lat['stoch'].shape)
+      # best_lat = jax.lax.select(best_surprise > surprise, y_i_lat, best_lat)
+      best_lat = {
+      'deter': jax.lax.select(expanded_condition_deter, y_i_lat['deter'], best_lat['deter']),
+      'stoch': jax.lax.select(expanded_condition_stoch, y_i_lat['stoch'], best_lat['stoch'])
+      }
+      
+      best_surprise = jax.lax.select(best_surprise > surprise, surprise, best_surprise)
+      
+    return best_lat, prior_orig
 
   def dyn_loss(self, post, prior, impl='kl', free=1.0):
     if impl == 'kl':
@@ -236,6 +318,64 @@ class MultiEncoder(nj.Module):
     outputs = outputs.reshape(batch_dims + outputs.shape[1:])
     return outputs
 
+class SeparateEncoder(nj.Module):
+  def __init__(
+      self, shapes, cnn_keys=r'.*', mlp_keys=r'.*', mlp_layers=4,
+      mlp_units=512, cnn='resize', cnn_depth=48,
+      cnn_blocks=2, resize='stride',
+      symlog_inputs=False, minres=4, **kw):
+    excluded = ('is_first', 'is_last')
+    shapes = {k: v for k, v in shapes.items() if (
+        k not in excluded and not k.startswith('log_'))}
+    self.cnn_shapes = {k: v for k, v in shapes.items() if (
+        len(v) == 3 and re.match(cnn_keys, k))}
+    self.mlp_shapes = {k: v for k, v in shapes.items() if (
+        len(v) in (1, 2) and re.match(mlp_keys, k))}
+    self.shapes = {**self.cnn_shapes, **self.mlp_shapes}
+    print('Encoder CNN shapes:', self.cnn_shapes)
+    print('Encoder MLP shapes:', self.mlp_shapes)
+    cnn_kw = {**kw, 'minres': minres, 'name': 'cnn'}
+    mlp_kw = {**kw, 'symlog_inputs': symlog_inputs, 'name': 'mlp'}
+    if cnn == 'resnet':
+      print(self.cnn_shapes)
+      # print([k for k in self.cnn_shapes])
+      self._cnn_sep = [ImageEncoderResnet(cnn_depth, cnn_blocks, resize, **{**kw, 'minres': minres, 'name': f'cnn_{k}'}) for k in self.cnn_shapes]
+
+    else:
+      raise NotImplementedError(cnn)
+    if self.mlp_shapes:
+      self._mlp_sep = [MLP(None, mlp_layers, mlp_units, dist='none', ** {**kw, 'symlog_inputs': symlog_inputs, 'name': f'mlp_{k}'}) for k in self.mlp_shapes]
+
+  def __call__(self, data):
+    some_key, some_shape = list(self.shapes.items())[0]
+    batch_dims = data[some_key].shape[:-len(some_shape)]
+    data = {
+        k: v.reshape((-1,) + v.shape[len(batch_dims):])
+        for k, v in data.items()}
+    outputs = []
+    if self.cnn_shapes:
+      for ite, k in enumerate(self.cnn_shapes):
+        # print(k)
+        inputs = jnp.concatenate([data[k]], -1)
+        output = self._cnn_sep[ite](inputs)
+        output = output.reshape((output.shape[0], -1))
+        # output = jnp.concatenate(output, -1)
+        output = output.reshape(batch_dims + output.shape[1:])
+        outputs.append(output)
+    if self.mlp_shapes:
+      for ite, k in enumerate(self.mlp_shapes):
+        inputs = [
+            data[k][..., None] if len(self.shapes[k]) == 0 else data[k]
+            for k in self.mlp_shapes]
+        inputs = jnp.concatenate([x.astype(f32) for x in inputs], -1)
+        inputs = jaxutils.cast_to_compute(inputs)
+        output = self._mlp_sep(inputs)
+        # output = jnp.concatenate(output, -1)
+        output = output.reshape(batch_dims + output.shape[1:])
+        outputs.append(self._mlp_sep(inputs))
+    # outputs = jnp.concatenate(output, -1)
+    # outputs = outputs.reshape(batch_dims + outputs.shape[1:])
+    return outputs
 
 class MultiDecoder(nj.Module):
 

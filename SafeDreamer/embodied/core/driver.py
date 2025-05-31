@@ -36,7 +36,7 @@ class Driver:
   def on_episode(self, callback):
     self._on_episodes.append(callback)
 
-  def __call__(self, policy, steps=0, episodes=0, lag=0.0, lag_p=0.0, lag_i=0.0, lag_d=0.0):
+  def __call__(self, policy, steps=0, episodes=10, lag=0.0, lag_p=0.0, lag_i=0.0, lag_d=0.0):
     step, episode = 0, 0
     while step < steps or episode < episodes:
       step, episode = self._step(policy, step, episode, lag, lag_p, lag_i, lag_d)

@@ -106,14 +106,16 @@ def train_eval(
   driver_eval = embodied.Driver(eval_env)
   driver_eval.on_step(eval_replay.add)
   driver_eval.on_episode(lambda ep, worker: per_episode(ep, mode='eval'))
-
+  print('Going into random agent')
   random_agent = embodied.RandomAgent(train_env.act_space)
   print('Prefill train dataset.')
+  print(args.batch_steps)
+  print(args.train_fill)
   while len(train_replay) < max(args.batch_steps, args.train_fill):
-    driver_train(random_agent.policy, steps=100, lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
+    driver_train(random_agent.policy, steps=10000, lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
   print('Prefill eval dataset.')
   while len(eval_replay) < max(args.batch_steps, args.eval_fill):
-    driver_eval(random_agent.policy, steps=100, lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
+    driver_eval(random_agent.policy, steps=10000, lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
   logger.add(metrics.result())
   logger.write()
 
@@ -163,7 +165,7 @@ def train_eval(
       print('Starting evaluation at step', int(step))
       driver_eval.reset()
       driver_eval(policy_eval, episodes=max(len(eval_env), args.eval_eps), lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
-    driver_train(policy_train, steps=100, lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
+    driver_train(policy_train, steps=10000, lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
     if should_save(step):
       checkpoint.save()
   logger.write()

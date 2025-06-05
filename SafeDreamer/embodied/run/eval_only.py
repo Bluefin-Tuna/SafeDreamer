@@ -46,6 +46,7 @@ class video_buffer:
       os.makedirs(logdir+'/'+str(current_step)+'/', exist_ok=True)
       plt.imsave(logdir+'/'+str(current_step)+'/true' + '_' + str(i)+'.png', ground[i])
       plt.imsave(logdir+'/'+str(current_step)+'/pred' + '_' + str(i)+'.png', pred[i])
+
 def eval_only(agent, env, logger, args, lag):
 
   logdir = embodied.Path(args.logdir)
@@ -138,12 +139,14 @@ def eval_only(agent, env, logger, args, lag):
       if re.match(args.log_keys_max, key):
         stats[f'max_{key}'] = ep[key].max(0).mean()
     groundtruth_video_list = []
+    noveltruth_video_list = []
+    highdef_noveltruth_video_list = []
     ep_expend = {}
     for key, value in ep.items():
       ep_expend[key] = np.expand_dims(value, 0)
 
     model_report = agent.report_eval(ep_expend)
-
+    nov_key = args.mode.split('_')[-1]
 
     if 'image_orignal' in ep.keys():
       for i in range(ep['image_orignal'].shape[0]):
@@ -154,6 +157,37 @@ def eval_only(agent, env, logger, args, lag):
         name_prefix='groundtruth_video_list_' + str(step.value),
         fps=20,
       )
+
+    if nov_key in ep.keys():
+      for i in range(ep[nov_key].shape[0]):
+        noveltruth_video_list.append(ep[nov_key][i])
+      save_video(
+        frames=noveltruth_video_list,
+        video_folder=args.logdir,
+        name_prefix='noveltruth_video_list_' + str(step.value),
+        fps=20,
+      )
+
+    if 'high_def_nov' in ep.keys():
+      for i in range(ep[nov_key].shape[0]):
+        highdef_noveltruth_video_list.append(ep[nov_key][i])
+      save_video(
+        frames=noveltruth_video_list,
+        video_folder=args.logdir,
+        name_prefix='highdef_noveltruth_video_list_' + str(step.value),
+        fps=20,
+      )
+    
+  
+    # for i in range(ep['image_occlusion'].shape[0]):
+    #   occ_video_list.append(ep['image_occlusion'][i])
+    # save_video(
+    #   frames=occ_video_list,
+    #   video_folder=args.logdir,
+    #   name_prefix='occlusiontruth_video_list_' + str(step.value),
+    #   fps=20,
+    # )
+
     groundtruth_video_list2 = []
     if 'image_orignal2' in ep.keys():
       for i in range(ep['image_orignal2'].shape[0]):

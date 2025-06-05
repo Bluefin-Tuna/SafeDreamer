@@ -28,29 +28,32 @@ def main(argv=None):
   parsed, other = embodied.Flags(configs=['defaults']).parse_known(argv)
   config = embodied.Config(agt.Agent.configs['defaults'])
   now_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-  
   config = config.update({
     'task': 'safetygym_SafetyPointGoal2-v0'
-  })
-  logdir_algo = now_time + '_' + str(config.method) + '_' + str(config.task) + '_' + str(config.seed)
-  config = config.update({
-      'logdir': f'/logdir/{logdir_algo}-safedreamer'
   })
   for name in parsed.configs:
     config = config.update(agt.Agent.configs[name])
   config = embodied.Flags(config).parse(other)
-  
-  # logdir_algo = config.logdir + now_time + '_' + str(config.method) + '_' + str(config.task) + '_' + str(config.seed)
-
+   #now_time + '_' + str(config.method) + '_' + str(config.task) + '_' + str(config.seed)
+  logdir_algo = 'temp_geigh'
+  print('args mode: ',config.run.mode)
+  logdir_path = logdir_algo + '_' + config.run.mode if config.run.mode != '' else logdir_algo
+  config = config.update({
+      'logdir': f'~/logdir/{logdir_path}-safedreamer'
+  })
   args = embodied.Config(
       **config.run, use_cost=config.use_cost,
       batch_steps=config.batch_size * config.batch_length, logdir=config.logdir, task='safetygym_SafetyPointGoal2-v0')
   
+
+
+  
   os.environ['CUDA_VISIBLE_DEVICES'] = str(config.jax.logical_gpus)
 
-  logdir = embodied.Path(logdir_algo)
+  logdir_path = logdir_algo + '_' + args.mode if args.mode != '' else logdir_algo
+  logdir = embodied.Path(logdir_path)
   logdir.mkdirs()
-  config.save(logdir / 'config.yaml')
+  print('Logdir', logdir)
   step = embodied.Counter()
   logger = make_logger(parsed, logdir, step, config)
 
@@ -97,7 +100,7 @@ def main(argv=None):
           agent, env, replay, eval_replay, logger, args)
 
     elif args.script == 'eval_only':
-      env = make_envs(config, mode='eval')  # mode='eval'
+      env = make_envs(config, mode=args.mode)  # mode='eval'
       cleanup.append(env)
       agent = agt.Agent(env.obs_space, env.act_space, step, config)
       embodied.run.eval_only(agent, env, logger, args, lag)

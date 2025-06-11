@@ -169,10 +169,10 @@ def eval_only(agent, env, logger, args, lag):
       )
 
     if 'high_def_nov' in ep.keys():
-      for i in range(ep[nov_key].shape[0]):
-        highdef_noveltruth_video_list.append(ep[nov_key][i])
+      for i in range(ep['high_def_nov'].shape[0]):
+        highdef_noveltruth_video_list.append(ep['high_def_nov'][i])
       save_video(
-        frames=noveltruth_video_list,
+        frames=highdef_noveltruth_video_list,
         video_folder=args.logdir,
         name_prefix='highdef_noveltruth_video_list_' + str(step.value),
         fps=20,

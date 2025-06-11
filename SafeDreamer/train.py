@@ -35,7 +35,7 @@ def main(argv=None):
     config = config.update(agt.Agent.configs[name])
   config = embodied.Flags(config).parse(other)
    #now_time + '_' + str(config.method) + '_' + str(config.task) + '_' + str(config.seed)
-  logdir_algo = 'temp_geigh'
+  logdir_algo = 'temp_geigh_2'
   print('args mode: ',config.run.mode)
   logdir_path = logdir_algo + '_' + config.run.mode if config.run.mode != '' else logdir_algo
   config = config.update({
@@ -80,7 +80,16 @@ def main(argv=None):
       eval_replay = make_replay(config, logdir / 'eval_replay', is_eval=True)
       env = make_envs(config)
       eval_env = make_envs(config)  # mode='eval'
+      # modes = ['occlusion_image', 'jitter_image', 'gaussian_image', 'channelswap_image']
+      # eval_envs = []
+      # for mode in modes:
+      #   config.run.mode = mode
+      #   eval_envs.append(make_envs(config))
+
       cleanup += [env, eval_env]
+      eval_env.set_mode('occlusion_image')
+      # cleanup += eval_envs
+      # print(eval_env._envs[0]._ctor)
       agent = agt.Agent(env.obs_space, env.act_space, step, config)
       embodied.run.train_eval(
           agent, env, eval_env, replay, eval_replay, logger, args, lag)
@@ -102,6 +111,7 @@ def main(argv=None):
     elif args.script == 'eval_only':
       env = make_envs(config, mode=args.mode)  # mode='eval'
       cleanup.append(env)
+      # env.set_mode('gaussian_image')
       agent = agt.Agent(env.obs_space, env.act_space, step, config)
       embodied.run.eval_only(agent, env, logger, args, lag)
 

@@ -217,10 +217,10 @@ class RSSM(nj.Module):
   def compute_bayesian_surprise(self, total_newlat_separate, prior_orig, free=1.0):
     # prior = self._prior(outs.get('feat', outs['deter']))
     prior = self.get_dist(prior_orig)
-    batch_size = outs['deter'].shape[0]
+    batch_size = total_newlat_separate[0]['deter'].shape[0]
     best_surprise = jnp.full((batch_size,), jnp.inf)
     best_i = 0
-    best_lat = newlat_separate[0]
+    best_lat = total_newlat_separate[0]
     for i, y_i_lat in enumerate(total_newlat_separate):
       # y_i_post = y_i_out['logit']
       surprise = self._dist(y_i_lat).kl_divergence(self._dist(prior))
@@ -235,7 +235,7 @@ class RSSM(nj.Module):
       best_lat = {
       'deter': jax.lax.select(expanded_condition_deter, y_i_lat['deter'], best_lat['deter']),
       'stoch': jax.lax.select(expanded_condition_stoch, y_i_lat['stoch'], best_lat['stoch'])
-      }
+      } #Notice how we take the deter as well, this is a research question, which h_t should we move forward with?
       
       best_surprise = jax.lax.select(best_surprise > surprise, surprise, best_surprise)
       

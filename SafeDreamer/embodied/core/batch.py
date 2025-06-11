@@ -26,6 +26,15 @@ class BatchEnv(base.Env):
 
   def __len__(self):
     return len(self._envs)
+  
+  # @property
+  # def mode(self):
+  #   return self._envs[0]._mode
+  
+  def set_mode(self, mode):
+    for i, env in enumerate(self._envs):
+      print('setting mode to ', mode)
+      env.set_mode(mode)
 
   def step(self, action):
     assert all(len(v) == len(self._envs) for v in action.values()), (

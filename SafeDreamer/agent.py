@@ -76,7 +76,8 @@ class Agent(nj.Module):
       new_lat, _ = self.wm.rssm.obs_step_separate(
         prev_latent, prev_action, embed, obs['is_first'],  ite)
       total_newlat_separate.append(new_lat)
-    # latent, _ = self.wm.rssm.compute_bayesian_surprise(total_newlat_separate, prior_orig)
+    if mode not in ['train', 'eval', 'explore']:
+      latent, _ = self.wm.rssm.compute_bayesian_surprise(total_newlat_separate, prior_orig)
       # total_newlat_separate.append(newlat_separate)
     #self.expl_behavior.policy(latent, expl_state)
     task_outs, task_state = self.task_behavior.policy(latent, task_state)
@@ -102,6 +103,13 @@ class Agent(nj.Module):
       else:
         outs = task_outs
         outs['log_entropy'] = outs['action'].entropy()
+    else: #Runs the eval by default
+      if self.config.expl_behavior in ['CEMPlanner', 'CCEPlanner', 'PIDPlanner']:
+        outs = expl_outs
+        outs['log_entropy'] = jnp.zeros(outs['action'].shape[:1])
+      else:
+        outs = task_outs
+        outs['action'] = outs['action'].sample(seed=nj.rng())
 
     if self.config.expl_behavior not in ['CEMPlanner', 'CCEPlanner', 'PIDPlanner']:
       outs['log_plan_action_mean'] = jnp.zeros(outs['action'].shape)

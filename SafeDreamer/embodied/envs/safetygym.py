@@ -35,9 +35,14 @@ class SafetyGym(embodied.Env):
     self._repeat = repeat
     self._mode = mode
     print(self._mode)
+
   @property
   def repeat(self):
     return self._repeat
+
+  @property
+  def mode(self):
+    return self._mode
 
   @functools.cached_property
   def obs_space(self):
@@ -52,6 +57,10 @@ class SafetyGym(embodied.Env):
   @functools.cached_property
   def act_space(self):
     return self._env.act_space
+  
+  def set_mode(self, mode):
+    print('setting mode to inner', mode)
+    self._mode = mode
 
   def step(self, action):
     for key, space in self.act_space.items():
@@ -113,7 +122,7 @@ class SafetyGym(embodied.Env):
           noise = np.random.normal(0, 5, obs[nov_key].shape).astype(np.uint8)
           noise_high_def = np.random.normal(0, 5, obs['high_def_nov'].shape).astype(np.uint8)
           obs[nov_key] = np.clip(obs[nov_key] + noise, 0, 255)
-          # obs['high_def_nov'] = np.clip(obs['high_def_nov'] + noise_high_def, 0, 255)
+          obs['high_def_nov'] = np.clip(obs['high_def_nov'] + noise_high_def, 0, 255)
           
         if 'occlusion' in self._mode:
           # 3. Mask part of the image to simulate occlusion
@@ -133,8 +142,6 @@ class SafetyGym(embodied.Env):
           mask_w_hd, mask_h_hd = mask_w * scale_factor, mask_h * scale_factor
           occlusion_mask_hd[y_hd:y_hd + mask_h_hd, x_hd:x_hd + mask_w_hd] = 0
           obs['high_def_nov'] = occlusion_mask_hd
-
-
 
         if 'channelswap' in self._mode:
           # 4. Simulate semantic novelty: swap color channels randomly

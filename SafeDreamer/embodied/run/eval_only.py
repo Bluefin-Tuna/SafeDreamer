@@ -177,16 +177,6 @@ def eval_only(agent, env, logger, args, lag):
         name_prefix='highdef_noveltruth_video_list_' + str(step.value),
         fps=20,
       )
-    
-  
-    # for i in range(ep['image_occlusion'].shape[0]):
-    #   occ_video_list.append(ep['image_occlusion'][i])
-    # save_video(
-    #   frames=occ_video_list,
-    #   video_folder=args.logdir,
-    #   name_prefix='occlusiontruth_video_list_' + str(step.value),
-    #   fps=20,
-    # )
 
     groundtruth_video_list2 = []
     if 'image_orignal2' in ep.keys():

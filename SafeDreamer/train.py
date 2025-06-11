@@ -44,10 +44,7 @@ def main(argv=None):
   args = embodied.Config(
       **config.run, use_cost=config.use_cost,
       batch_steps=config.batch_size * config.batch_length, logdir=config.logdir, task='safetygym_SafetyPointGoal2-v0')
-  
 
-
-  
   os.environ['CUDA_VISIBLE_DEVICES'] = str(config.jax.logical_gpus)
 
   logdir_path = logdir_algo + '_' + args.mode if args.mode != '' else logdir_algo
@@ -80,16 +77,7 @@ def main(argv=None):
       eval_replay = make_replay(config, logdir / 'eval_replay', is_eval=True)
       env = make_envs(config)
       eval_env = make_envs(config)  # mode='eval'
-      # modes = ['occlusion_image', 'jitter_image', 'gaussian_image', 'channelswap_image']
-      # eval_envs = []
-      # for mode in modes:
-      #   config.run.mode = mode
-      #   eval_envs.append(make_envs(config))
-
       cleanup += [env, eval_env]
-      eval_env.set_mode('occlusion_image')
-      # cleanup += eval_envs
-      # print(eval_env._envs[0]._ctor)
       agent = agt.Agent(env.obs_space, env.act_space, step, config)
       embodied.run.train_eval(
           agent, env, eval_env, replay, eval_replay, logger, args, lag)

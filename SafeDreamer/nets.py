@@ -223,15 +223,17 @@ class RSSM(nj.Module):
     best_lat = total_newlat_separate[0]
     for i, y_i_lat in enumerate(total_newlat_separate):
       # y_i_post = y_i_out['logit']
-      surprise = self.get_dist(y_i_lat).kl_divergence(prior)
+      surprise = self.get_dist(y_i_lat).kl_divergence(prior) #+ .5*prior.kl_divergence(self.get_dist(y_i_lat))
       # print(surprise)
 
       condition = best_surprise > surprise  # Shape (16,)
+      # print(condition)
 
       # Expand condition to match target shape (16, 4096)
       expanded_condition_deter = jnp.broadcast_to(condition[:, None], y_i_lat['deter'].shape)
       expanded_condition_stoch = jnp.broadcast_to(condition[:, None, None], y_i_lat['stoch'].shape)
       expanded_condition_logit = jnp.broadcast_to(condition[:, None, None], y_i_lat['logit'].shape)
+      # print(expanded_condition_deter)
       # best_lat = jax.lax.select(best_surprise > surprise, y_i_lat, best_lat)
       best_lat = {
       'deter': jax.lax.select(expanded_condition_deter, y_i_lat['deter'], best_lat['deter']),
@@ -240,6 +242,10 @@ class RSSM(nj.Module):
       } #Notice how we take the deter as well, this is a research question, which h_t should we move forward with?
       
       best_surprise = jax.lax.select(best_surprise > surprise, surprise, best_surprise)
+      # print(best_surprise)
+      # if condition.numpy:
+      #   print('new i: ', i)
+
       
     return best_lat, prior_orig
 

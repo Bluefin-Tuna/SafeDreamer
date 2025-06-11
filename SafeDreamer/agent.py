@@ -80,6 +80,27 @@ class Agent(nj.Module):
 
     if mode not in ['train', 'eval', 'explore']:
       latent, _ = self.wm.rssm.compute_bayesian_surprise(total_newlat_separate, prior_orig)
+      print('Checking equality')
+      # Function to compare
+      def stoch_equal(latent, total_newlat_separate):
+          # This will compare arrays element-wise and reduce to a single bool
+          cond = jnp.all(latent['stoch'] == total_newlat_separate[0]['stoch'])
+
+          # Define the branches
+          def true_fn(_):
+              print('hello')
+              return jnp.array(1)
+
+          def false_fn(_):
+              print('No good.')
+              return jnp.array(0)  # use 0 to represent "Not Equal
+
+          return jax.lax.cond(cond, true_fn, false_fn, operand=None)
+
+      stoch_equal(latent, total_newlat_separate)
+      # import pdb
+      # pdb.set_trace()
+      # latent['stoch'] == total_newlat_separate[0]['stoch']
 
     task_outs, task_state = self.task_behavior.policy(latent, task_state)
     expl_outs, expl_state = self.expl_behavior.policy(latent, expl_state)

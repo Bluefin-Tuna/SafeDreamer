@@ -29,7 +29,7 @@ defaults:
     expl_until: 0
     log_every: 300
     save_every: 900
-    eval_every: 1e6
+    eval_every: 1e3 #1e6
     eval_initial: True
     eval_eps: 1
     eval_samples: 1

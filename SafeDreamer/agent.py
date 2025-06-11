@@ -70,14 +70,17 @@ class Agent(nj.Module):
     embed_separate = self.wm.encoder_separate(obs)
     latent, prior_orig = self.wm.rssm.obs_step(
         prev_latent, prev_action, embed, obs['is_first'])
+    # print('old latent',latent)
     total_newlat_separate = [latent]
     total_out_separate = [prior_orig]
     for ite, embed_y in enumerate(embed_separate):
       new_lat, _ = self.wm.rssm.obs_step_separate(
         prev_latent, prev_action, embed, obs['is_first'],  ite)
       total_newlat_separate.append(new_lat)
+    print(mode)
     if mode not in ['train', 'eval', 'explore']:
       latent, _ = self.wm.rssm.compute_bayesian_surprise(total_newlat_separate, prior_orig)
+      # print('new latent', latent)
       # total_newlat_separate.append(newlat_separate)
     #self.expl_behavior.policy(latent, expl_state)
     task_outs, task_state = self.task_behavior.policy(latent, task_state)

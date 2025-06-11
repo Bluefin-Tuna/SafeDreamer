@@ -109,6 +109,7 @@ class SafetyGym(embodied.Env):
         nov_key = self._mode.split('_')[-1]
         obs['high_def_nov'] = obs['image_orignal'].copy()
         if 'jitter' in self._mode:
+          # print('Mode switch')
           # 1. Apply color jitter to simulate lighting variation
           image_jitter = obs[nov_key].astype(np.float32)
           brightness_factor = np.random.uniform(0.8, 1.2)
@@ -125,6 +126,7 @@ class SafetyGym(embodied.Env):
           obs['high_def_nov'] = np.clip(obs['high_def_nov'] + noise_high_def, 0, 255)
           
         if 'occlusion' in self._mode:
+          # print('Mode switch')
           # 3. Mask part of the image to simulate occlusion
           occlusion_mask = obs[nov_key].copy()
           h, w, _ = occlusion_mask.shape

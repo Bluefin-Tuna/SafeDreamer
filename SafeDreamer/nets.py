@@ -223,17 +223,19 @@ class RSSM(nj.Module):
     best_lat = total_newlat_separate[0]
     for i, y_i_lat in enumerate(total_newlat_separate):
       # y_i_post = y_i_out['logit']
-      surprise = self._dist(y_i_lat).kl_divergence(self._dist(prior))
-      print(surprise)
+      surprise = self.get_dist(y_i_lat).kl_divergence(prior)
+      # print(surprise)
 
       condition = best_surprise > surprise  # Shape (16,)
 
       # Expand condition to match target shape (16, 4096)
       expanded_condition_deter = jnp.broadcast_to(condition[:, None], y_i_lat['deter'].shape)
       expanded_condition_stoch = jnp.broadcast_to(condition[:, None, None], y_i_lat['stoch'].shape)
+      expanded_condition_logit = jnp.broadcast_to(condition[:, None, None], y_i_lat['logit'].shape)
       # best_lat = jax.lax.select(best_surprise > surprise, y_i_lat, best_lat)
       best_lat = {
       'deter': jax.lax.select(expanded_condition_deter, y_i_lat['deter'], best_lat['deter']),
+      'logit': jax.lax.select(expanded_condition_logit, y_i_lat['logit'], best_lat['logit']),
       'stoch': jax.lax.select(expanded_condition_stoch, y_i_lat['stoch'], best_lat['stoch'])
       } #Notice how we take the deter as well, this is a research question, which h_t should we move forward with?
       

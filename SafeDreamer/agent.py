@@ -2,6 +2,7 @@ import embodied
 import jax
 import jax.numpy as jnp
 import ruamel.yaml as yaml
+from jax import random
 tree_map = jax.tree_util.tree_map
 sg = lambda x: tree_map(jax.lax.stop_gradient, x)
 
@@ -32,6 +33,7 @@ class Agent(nj.Module):
     self.obs_space = obs_space
     self.act_space = act_space['action']
     self.step = step
+    self._switch = 0
     self.wm = WorldModel(obs_space, act_space, config, name='wm')
     self.task_behavior = getattr(behaviors, config.task_behavior)(
         self.wm, self.act_space, self.config, name='task_behavior')
@@ -54,6 +56,8 @@ class Agent(nj.Module):
     return self.wm.initial(batch_size)
 
   def policy(self, obs, state, mode='train'):
+    # print(obs.keys())
+    # obs['image'] = jnp.zeros(obs['image'].shape, dtype=float)
     self.config.jax.jit and print('Tracing policy function.')
     obs = self.preprocess(obs)
     (prev_latent, prev_action), task_state, expl_state = state
@@ -67,43 +71,54 @@ class Agent(nj.Module):
       expl_state['lagrange_d'] = obs['lagrange_d']
       task_state['lagrange_d'] = obs['lagrange_d']
     embed = self.wm.encoder(obs)
-    embed_separate = self.wm.encoder_separate(obs)
+    # embed_separate = self.wm.encoder_separate(obs)
     latent, prior_orig = self.wm.rssm.obs_step(
         prev_latent, prev_action, embed, obs['is_first'])
     # print('old latent',latent)
-    total_newlat_separate = [latent]
-    total_out_separate = [prior_orig]
-    for ite, embed_y in enumerate(embed_separate):
-      new_lat, _ = self.wm.rssm.obs_step_separate(
-        prev_latent, prev_action, embed, obs['is_first'],  ite)
-      total_newlat_separate.append(new_lat)
-
+    # total_newlat_separate = [latent]
+    
+    # total_out_separate = [prior_orig]
+    # for ite, embed_y in enumerate(embed_separate):
+    #   new_lat, new_prior = self.wm.rssm.obs_step_separate(
+    #     prev_latent, prev_action, embed_y, obs['is_first'],  ite)
+    #   total_newlat_separate.append(new_lat)
+    #   total_out_separate.append(new_prior)
+    # print(mode)
     if mode not in ['train', 'eval', 'explore']:
-      latent, _ = self.wm.rssm.compute_bayesian_surprise(total_newlat_separate, prior_orig)
-      print('Checking equality')
-      # Function to compare
-      def stoch_equal(latent, total_newlat_separate):
-          # This will compare arrays element-wise and reduce to a single bool
-          cond = jnp.all(latent['stoch'] == total_newlat_separate[0]['stoch'])
-
-          # Define the branches
-          def true_fn(_):
-              print('hello')
-              return jnp.array(1)
-
-          def false_fn(_):
-              print('No good.')
-              return jnp.array(0)  # use 0 to represent "Not Equal
-
-          return jax.lax.cond(cond, true_fn, false_fn, operand=None)
-
-      stoch_equal(latent, total_newlat_separate)
-      # import pdb
-      # pdb.set_trace()
-      # latent['stoch'] == total_newlat_separate[0]['stoch']
-
+      total_newlat_seperate = [latent]
+      surprise = self.wm.rssm.get_dist(latent).kl_divergence(self.wm.rssm.get_dist(prior_orig))
+      surprises = [surprise]
+      available_keys = ['image','image2','image3']
+      for ite, image_key in enumerate(available_keys):
+        obs_temp = jax.tree_map(lambda x: x, obs)
+        obs_temp[image_key] = jnp.zeros(obs['image'].shape, dtype=float)
+        embed = self.wm.encoder(obs_temp)
+        temp_latent, temp_prior_orig = self.wm.rssm.obs_step(
+          prev_latent, prev_action, embed, obs['is_first'])
+        surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(self.wm.rssm.get_dist(temp_prior_orig))
+        
+        surprises.append(surprise)
+        total_newlat_seperate.append(temp_latent)
+    
+      # Find index of minimum surprise
+      surprises = jnp.array(surprises)
+      min_idx = jnp.argmin(surprises)
+      
+      # Stack candidates and select using advanced indexing
+      stacked_latents = jax.tree_map(
+          lambda *candidates: jnp.stack(candidates, axis=0),
+          *total_newlat_seperate
+      )
+      
+      # Select the latent with lowest surprise
+      latent = jax.tree_map(
+          lambda stacked: stacked[min_idx],
+          stacked_latents
+      )
+        
     task_outs, task_state = self.task_behavior.policy(latent, task_state)
     expl_outs, expl_state = self.expl_behavior.policy(latent, expl_state)
+
     if mode == 'eval':
       if self.config.expl_behavior in ['CEMPlanner', 'CCEPlanner', 'PIDPlanner']:
         outs = expl_outs
@@ -234,8 +249,79 @@ class WorldModel(nj.Module):
         modules, self.loss, data, state, has_aux=True)
     metrics.update(mets)
     return state, outs, metrics
+  
+  def randomly_mask_images_per_timestep(self, data, key, mask_value=0.0):
+    """
+    Randomly mask 0 to n-1 images for each timestep, ensuring at least one image remains unmasked.
+    
+    Args:
+        data: Dictionary containing the dataset with image keys
+        key: JAX random key
+        mask_value: Value to use for masked pixels (default: 0.0)
+    
+    Returns:
+        Modified data dictionary with randomly masked images
+    """
+    # Create a copy of the data to avoid modifying the original
+    masked_data = data.copy()
+    
+    # Image keys to process
+    image_keys = ['image', 'image2', 'image3']
+    available_keys = [k for k in image_keys if k in data]
+    
+    if len(available_keys) == 0:
+        return masked_data
+    
+    n_images = len(available_keys)
+    batch_size, seq_len = data[available_keys[0]].shape[0], data[available_keys[0]].shape[1]  # 16, 64
+    
+    # Split keys
+    key1, key2 = random.split(key)
+    
+    # For each (batch, timestep), randomly choose how many images to mask (0 to n-1)
+    num_to_mask = random.randint(key1, shape=(batch_size, seq_len), minval=0, maxval=n_images)
+    
+    # Generate random values for each image at each (batch, timestep)
+    # Shape: [batch_size, seq_len, n_images]
+    random_vals = random.uniform(key2, shape=(batch_size, seq_len, n_images))
+    
+    # Sort the random values to get rankings (0 = smallest, n_images-1 = largest)
+    rankings = jnp.argsort(random_vals, axis=-1)
+    
+    # Create a mask where we mask images with ranking < num_to_mask
+    # This gives us a random selection of num_to_mask images
+    mask_matrix = jnp.zeros((batch_size, seq_len, n_images), dtype=bool)
+    
+    for i in range(n_images):
+        # For each image position, check if its ranking is less than num_to_mask
+        image_rank = jnp.where(rankings == i, 
+                              jnp.arange(n_images)[None, None, :], 
+                              n_images)  # Set to n_images if not this image
+        min_rank = jnp.min(image_rank, axis=-1)  # Get the ranking for image i
+        should_mask = min_rank < num_to_mask
+        mask_matrix = mask_matrix.at[:, :, i].set(should_mask)
+    
+    # Apply masks to each image
+    for i, img_key in enumerate(available_keys):
+        images = data[img_key]
+        
+        # Expand mask to match image dimensions
+        mask = mask_matrix[:, :, i].reshape(batch_size, seq_len, 1, 1, 1)
+        
+        # Apply mask: where mask is True, replace with mask_value
+        masked_images = jnp.where(mask, mask_value, images)
+        
+        # Update the data dictionary
+        masked_data[img_key] = masked_images
+    
+    return masked_data
 
   def loss(self, data, state):
+    # print('Processing data')
+    # Method 2: Mask individual timesteps independently
+    key = random.PRNGKey(42)
+    data = self.randomly_mask_images_per_timestep(data, key, mask_value=0.0)
+    
     embed = self.encoder(data)
     embed_separate = self.encoder_separate(data)
     prev_latent, prev_action = state

@@ -28,6 +28,7 @@ class RSSM(nj.Module):
     self._action_clip = action_clip
     self._kw = kw
 
+
   def initial(self, bs):
     if self._classes:
       state = dict(
@@ -213,17 +214,20 @@ class RSSM(nj.Module):
 
   def _mask(self, value, mask):
     return jnp.einsum('b...,b->b...', value, mask.astype(value.dtype))
+  
 
-  def compute_bayesian_surprise(self, total_newlat_separate, prior_orig, free=1.0):
+  def compute_bayesian_surprise_obs_iso(self, total_newlat_separate, total_newout_seperate, free=1.0):
     # prior = self._prior(outs.get('feat', outs['deter']))
-    prior = self.get_dist(prior_orig)
+    # prior = self.get_dist(prior_orig)
     batch_size = total_newlat_separate[0]['deter'].shape[0]
     best_surprise = jnp.full((batch_size,), jnp.inf)
-    best_i = 0
     best_lat = total_newlat_separate[0]
     for i, y_i_lat in enumerate(total_newlat_separate):
       # y_i_post = y_i_out['logit']
-      surprise = self.get_dist(y_i_lat).kl_divergence(prior) #+ .5*prior.kl_divergence(self.get_dist(y_i_lat))
+      # surprise = .25*self.get_dist(y_i_lat).kl_divergence(prior) + .75*prior.kl_divergence(self.get_dist(y_i_lat))
+      # surprise = prior.kl_divergence(self.get_dist(y_i_lat))
+      surprise = self.get_dist(y_i_lat).kl_divergence(self.get_dist(total_newout_seperate[0]))
+      # surprise = self.get_dist(total_newout_seperate[0]).kl_divergence(self.get_dist(y_i_lat))
       # print(surprise)
 
       condition = best_surprise > surprise  # Shape (16,)
@@ -238,7 +242,42 @@ class RSSM(nj.Module):
       best_lat = {
       'deter': jax.lax.select(expanded_condition_deter, y_i_lat['deter'], best_lat['deter']),
       'logit': jax.lax.select(expanded_condition_logit, y_i_lat['logit'], best_lat['logit']),
-      'stoch': jax.lax.select(expanded_condition_stoch, y_i_lat['stoch'], best_lat['stoch'])
+      'stoch': jax.lax.select(expanded_condition_stoch, y_i_lat['logit'], best_lat['stoch'])
+      } #Notice how we take the deter as well, this is a research question, which h_t should we move forward with?
+      
+      best_surprise = jax.lax.select(best_surprise > surprise, surprise, best_surprise)
+      # print(best_surprise)
+      # if condition.numpy:
+      #   print('new i: ', i)
+
+
+  def compute_bayesian_surprise(self, total_newlat_separate, total_newout_seperate, free=1.0):
+    # prior = self._prior(outs.get('feat', outs['deter']))
+    # prior = self.get_dist(prior_orig)
+    batch_size = total_newlat_separate[0]['deter'].shape[0]
+    best_surprise = jnp.full((batch_size,), jnp.inf)
+    best_lat = total_newlat_separate[0]
+    for i, y_i_lat in enumerate(total_newlat_separate):
+      # y_i_post = y_i_out['logit']
+      # surprise = .25*self.get_dist(y_i_lat).kl_divergence(prior) + .75*prior.kl_divergence(self.get_dist(y_i_lat))
+      # surprise = prior.kl_divergence(self.get_dist(y_i_lat))
+      surprise = self.get_dist(y_i_lat).kl_divergence(self.get_dist(total_newout_seperate[0]))
+      # surprise = self.get_dist(total_newout_seperate[0]).kl_divergence(self.get_dist(y_i_lat))
+      # print(surprise)
+
+      condition = best_surprise > surprise  # Shape (16,)
+      # print(condition)
+
+      # Expand condition to match target shape (16, 4096)
+      expanded_condition_deter = jnp.broadcast_to(condition[:, None], y_i_lat['deter'].shape)
+      expanded_condition_stoch = jnp.broadcast_to(condition[:, None, None], y_i_lat['stoch'].shape)
+      expanded_condition_logit = jnp.broadcast_to(condition[:, None, None], y_i_lat['logit'].shape)
+      # print(expanded_condition_deter)
+      # best_lat = jax.lax.select(best_surprise > surprise, y_i_lat, best_lat)
+      best_lat = {
+      'deter': jax.lax.select(expanded_condition_deter, y_i_lat['deter'], best_lat['deter']),
+      'logit': jax.lax.select(expanded_condition_logit, y_i_lat['logit'], best_lat['logit']),
+      'stoch': jax.lax.select(expanded_condition_stoch, y_i_lat['logit'], best_lat['stoch'])
       } #Notice how we take the deter as well, this is a research question, which h_t should we move forward with?
       
       best_surprise = jax.lax.select(best_surprise > surprise, surprise, best_surprise)
@@ -247,7 +286,7 @@ class RSSM(nj.Module):
       #   print('new i: ', i)
 
       
-    return best_lat, prior_orig
+    return best_lat, best_lat['deter']#prior_orig
 
   def dyn_loss(self, post, prior, impl='kl', free=1.0):
     if impl == 'kl':

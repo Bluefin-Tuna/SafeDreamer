@@ -35,7 +35,7 @@ def main(argv=None):
     config = config.update(agt.Agent.configs[name])
   config = embodied.Flags(config).parse(other)
    #now_time + '_' + str(config.method) + '_' + str(config.task) + '_' + str(config.seed)
-  logdir_algo = 'temp_geigh_2'
+  logdir_algo = 'temp_geigh_3'
   print('args mode: ',config.run.mode)
   logdir_path = logdir_algo + '_' + config.run.mode if config.run.mode != '' else logdir_algo
   config = config.update({

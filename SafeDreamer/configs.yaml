@@ -64,9 +64,9 @@ defaults:
   # Agent
   task_behavior: Greedy
   expl_behavior: None
-  batch_size: 16
+  batch_size: 16 #16
   batch_length: 64
-  data_loaders: 8
+  data_loaders: 6 #8
 
   # World Model
   grad_heads: [decoder, reward, cont, cost]
@@ -175,8 +175,8 @@ osrp:
   .*\.mlp_units: 1024
   .*\.mlp_layers: 5
   rssm: {stoch: 48, classes: 48}
-  encoder: {mlp_keys: '.*', cnn_keys: 'image|image2'}
-  decoder: {mlp_keys: '.*', cnn_keys: 'image|image2'}
+  encoder: {mlp_keys: '.*', cnn_keys: 'image|image2|image3'}
+  decoder: {mlp_keys: '.*', cnn_keys: 'image|image2|image3'}
 
 osrp_lag:
   task_behavior: Greedy

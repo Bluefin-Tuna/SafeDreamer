@@ -4,7 +4,7 @@ import os
 import embodied
 import numpy as np
 import cv2
-
+np.random.seed(0)
 
 class SafetyGym(embodied.Env):
 
@@ -51,6 +51,7 @@ class SafetyGym(embodied.Env):
       spaces['image'] = embodied.Space(np.uint8, self._size + (3,))
       if self._camera_name == 'vision_front_back':
         spaces['image2'] = embodied.Space(np.uint8, self._size + (3,))
+      spaces['image3'] = embodied.Space(np.uint8, self._size + (3,))
 
     return spaces
 
@@ -91,47 +92,55 @@ class SafetyGym(embodied.Env):
         if self._camera_name == 'vision_front_back':
           image2 = self._env.task.render(width=64, height=64, mode='rgb_array', camera_name='vision_back', cost={})
           obs['image2'] = image2
+        
+        obs['image3'] = self._env.task.render(width=64, height=64, mode='rgb_array', camera_name='fixedfar', cost={'cost_sum': obs['cost']})
       # elif self._mode == 'eval':
       else:
         obs['image_orignal'] = self._env.task.render(width=1024, height=1024, mode='rgb_array', camera_name='vision', cost={})
         image = cv2.resize(
             obs['image_orignal'], self._size, interpolation=cv2.INTER_AREA)
         obs['image'] = image
-        obs['image_far'] = self._env.task.render(width=1024, height=1024, mode='rgb_array', camera_name='fixedfar', cost={'cost_sum': obs['cost']})
+        obs['image3'] = self._env.task.render(width=1024, height=1024, mode='rgb_array', camera_name='fixedfar', cost={'cost_sum': obs['cost']})
+               
+        obs['image3']= cv2.resize(obs['image3'], self._size, interpolation=cv2.INTER_AREA)
 
         if self._camera_name == 'vision_front_back':
           obs['image_orignal2'] = self._env.task.render(width=1024, height=1024, mode='rgb_array', camera_name='vision_back', cost={})
           image2 = cv2.resize(
               obs['image_orignal2'], self._size, interpolation=cv2.INTER_AREA)
           obs['image2'] = image2
-
+        np.random.seed(0)
         # Add novel changes here:
         nov_key = self._mode.split('_')[-1]
-        obs['high_def_nov'] = obs['image_orignal'].copy()
+        
         if 'jitter' in self._mode:
+          obs['high_def_nov'] = obs['image_orignal'].copy()
           # print('Mode switch')
           # 1. Apply color jitter to simulate lighting variation
           image_jitter = obs[nov_key].astype(np.float32)
-          brightness_factor = np.random.uniform(0.8, 1.2)
-          contrast_factor = np.random.uniform(0.8, 1.2)
+          brightness_factor = np.random.uniform(5, 6)
+          contrast_factor = np.random.uniform(5, 6)
           image_jitter = np.clip(image_jitter * contrast_factor + brightness_factor * 10, 0, 255).astype(np.uint8)
           obs[nov_key] = image_jitter
           obs['high_def_nov'] = np.clip(obs['high_def_nov'].astype(np.float32) * contrast_factor + brightness_factor * 10, 0, 255).astype(np.uint8)
 
         if 'gaussian' in self._mode:
+          obs['high_def_nov'] = obs['image_orignal'].copy()
           # 2. Add Gaussian noise to simulate sensor noise
-          noise = np.random.normal(0, 5, obs[nov_key].shape).astype(np.uint8)
-          noise_high_def = np.random.normal(0, 5, obs['high_def_nov'].shape).astype(np.uint8)
+          noise = np.random.normal(20, 30, obs[nov_key].shape).astype(np.uint8)
+          noise_high_def = np.random.normal(20, 30, obs['high_def_nov'].shape).astype(np.uint8)
           obs[nov_key] = np.clip(obs[nov_key] + noise, 0, 255)
+          # obs['image'] = np.clip(obs['image'] + noise, 0, 255)
           obs['high_def_nov'] = np.clip(obs['high_def_nov'] + noise_high_def, 0, 255)
           
         if 'occlusion' in self._mode:
+          obs['high_def_nov'] = obs['image_orignal'].copy()
           # print('Mode switch')
           # 3. Mask part of the image to simulate occlusion
           occlusion_mask = obs[nov_key].copy()
           h, w, _ = occlusion_mask.shape
           x, y = np.random.randint(0, w//2), np.random.randint(0, h//2)
-          mask_w, mask_h = np.random.randint(10, 20), np.random.randint(10, 20)
+          mask_w, mask_h = np.random.randint(20, 40), np.random.randint(20, 40)
           occlusion_mask[y:y+mask_h, x:x+mask_w] = 0
           # obs['image_occlusion'] = occlusion_mask
           obs[nov_key] = occlusion_mask
@@ -146,6 +155,7 @@ class SafetyGym(embodied.Env):
           obs['high_def_nov'] = occlusion_mask_hd
 
         if 'channelswap' in self._mode:
+          obs['high_def_nov'] = obs['image_orignal'].copy()
           # 4. Simulate semantic novelty: swap color channels randomly
           obs[nov_key] = obs[nov_key][..., np.random.permutation(3)]
           obs['high_def_nov'] = obs['high_def_nov'][..., np.random.permutation(3)]

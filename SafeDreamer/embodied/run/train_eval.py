@@ -161,65 +161,65 @@ def train_eval(
       *args, mode='explore' if should_expl(step) else 'train')
   policy_eval = lambda *args: agent.policy(*args, mode='eval')
   policy_surprise = lambda *args: agent.policy(*args, mode='surprise')
-  novs = ['occlusion_image', 'jitter_image', 'gaussian_image', 'channelswap_image']
-  # while step < args.steps:
-  #   if should_eval(step):
-  #     print('Starting evaluation at step', int(step))
-  #     #Normal policy normal eval
-  #     driver_eval.reset()
-  #     driver_eval.on_episode(lambda ep, worker: per_episode(ep, mode='eval'))
-  #     driver_eval(policy_eval, episodes=max(len(eval_env), args.eval_eps), lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
-  #     #Surprise Policy, normal eval
-  #     driver_eval.reset()
-  #     driver_eval.on_episode(lambda ep, worker: per_episode(ep, mode='surprise'))
-  #     driver_eval(policy_surprise, episodes=max(len(eval_env), args.eval_eps), lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
-  #     for nov in novs:
-  #       eval_env.set_mode(nov)
-  #       driver_nov = embodied.Driver(eval_env)
-
-  #       baseline = f'{nov}_eval'
-  #       driver_nov.on_episode(lambda ep, worker: per_episode(ep, mode=baseline))
-  #       driver_nov(policy_eval, episodes=max(len(eval_env), args.eval_eps), lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
-        
-  #       driver_nov.reset()
-  #       method = f'{nov}_surprise'
-  #       driver_nov.on_episode(lambda ep, worker: per_episode(ep, mode=method))
-  #       driver_nov(policy_surprise, episodes=max(len(eval_env), args.eval_eps), lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
-      
-  #   driver_train(policy_train, steps=10000, lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
-  #   if should_save(step):
-  #     checkpoint.save()
-
+  novs = ['gaussian_image2', 'occlusion_image', 'jitter_image', 'channelswap_image']
   while step < args.steps:
-    print('Starting evaluation at step', int(step))
-    #Normal policy normal eval
-    driver_eval.reset()
-    driver_eval.on_episode(lambda ep, worker: per_episode(ep, mode='eval'))
-    driver_eval(policy_eval, episodes=max(len(eval_env), args.eval_eps), lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
-    #Surprise Policy, normal eval
-    print('Running surprise eval')
-    driver_eval.reset()
-    driver_eval.on_episode(lambda ep, worker: per_episode(ep, mode='surprise'))
-    driver_eval(policy_surprise, episodes=max(len(eval_env), args.eval_eps), lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
-    for nov in novs:
-      print(nov)
-      eval_env.set_mode(nov)
-      driver_nov = embodied.Driver(eval_env)
+    if should_eval(step):
+      print('Starting evaluation at step', int(step))
+      #Normal policy normal eval
+      driver_eval.reset()
+      driver_eval.on_episode(lambda ep, worker: per_episode(ep, mode='eval'))
+      driver_eval(policy_eval, episodes=max(len(eval_env), args.eval_eps), lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
+      #Surprise Policy, normal eval
+      driver_eval.reset()
+      driver_eval.on_episode(lambda ep, worker: per_episode(ep, mode='surprise'))
+      driver_eval(policy_surprise, episodes=max(len(eval_env), args.eval_eps), lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
+      for nov in novs:
+        eval_env.set_mode(nov)
+        driver_nov = embodied.Driver(eval_env)
+
+        baseline = f'{nov}_eval'
+        driver_nov.on_episode(lambda ep, worker: per_episode(ep, mode=baseline))
+        driver_nov(policy_eval, episodes=max(len(eval_env), args.eval_eps), lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
+        
+        driver_nov.reset()
+        method = f'{nov}_surprise'
+        driver_nov.on_episode(lambda ep, worker: per_episode(ep, mode=method))
+        driver_nov(policy_surprise, episodes=max(len(eval_env), args.eval_eps), lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
       
-      baseline = f'{nov}_eval'
-      print(baseline)
-      driver_nov.on_episode(lambda ep, worker: per_episode(ep, mode=baseline))
-      driver_nov(policy_eval, episodes=max(len(eval_env), args.eval_eps), lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
-      
-      driver_nov.reset()
-      method = f'{nov}_surprise'
-      print(method)
-      driver_nov.on_episode(lambda ep, worker: per_episode(ep, mode=method))
-      driver_nov(policy_surprise, episodes=max(len(eval_env), args.eval_eps), lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
-      
-    # driver_train(policy_train, steps=10000, lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
+    driver_train(policy_train, steps=10000, lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
     if should_save(step):
       checkpoint.save()
+
+  # while step < args.steps:
+  #   print('Starting evaluation at step', int(step))
+  #   #Normal policy normal eval
+  #   # driver_eval.reset()
+  #   # driver_eval.on_episode(lambda ep, worker: per_episode(ep, mode='eval'))
+  #   # driver_eval(policy_eval, steps=100, lag=lag.lagrange_penalty)
+  #   #Surprise Policy, normal eval
+  #   # print('Running surprise eval')
+  #   # driver_eval.reset()
+  #   # driver_eval.on_episode(lambda ep, worker: per_episode(ep, mode='surprise'))
+  #   # driver_eval(policy_surprise, steps=100, lag=lag.lagrange_penalty)
+  #   for nov in novs:
+  #     print(nov)
+  #     eval_env.set_mode(nov)
+  #     driver_nov = embodied.Driver(eval_env)
+      
+  #     baseline = f'{nov}_eval'
+  #     print('Running ',baseline)
+  #     driver_nov.on_episode(lambda ep, worker: per_episode(ep, mode=baseline))
+  #     driver_nov(policy_eval, steps=100, lag=lag.lagrange_penalty)
+      
+  #     driver_nov.reset()
+  #     method = f'{nov}_surprise'
+  #     print('Running ',method)
+  #     driver_nov.on_episode(lambda ep, worker: per_episode(ep, mode=method))
+  #     driver_nov(policy_surprise, steps=100, lag=lag.lagrange_penalty)
+      
+  #   # driver_train(policy_train, steps=10000, lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
+  #   # if should_save(step):
+  #   #   checkpoint.save()
 
   logger.write()
   logger.write()

@@ -147,89 +147,90 @@ def eval_only(agent, env, logger, args, lag):
 
     model_report = agent.report_eval(ep_expend)
     nov_key = args.mode.split('_')[-1]
+    save_videos = False
+    if save_videos == True:
+      if 'image_orignal' in ep.keys():
+        for i in range(ep['image_orignal'].shape[0]):
+          groundtruth_video_list.append(ep['image_orignal'][i])
+        save_video(
+          frames=groundtruth_video_list,
+          video_folder=args.logdir,
+          name_prefix='groundtruth_video_list_' + str(step.value),
+          fps=20,
+        )
 
-    if 'image_orignal' in ep.keys():
-      for i in range(ep['image_orignal'].shape[0]):
-        groundtruth_video_list.append(ep['image_orignal'][i])
-      save_video(
-        frames=groundtruth_video_list,
-        video_folder=args.logdir,
-        name_prefix='groundtruth_video_list_' + str(step.value),
-        fps=20,
-      )
+      if nov_key in ep.keys():
+        for i in range(ep[nov_key].shape[0]):
+          noveltruth_video_list.append(ep[nov_key][i])
+        save_video(
+          frames=noveltruth_video_list,
+          video_folder=args.logdir,
+          name_prefix='noveltruth_video_list_' + str(step.value),
+          fps=20,
+        )
 
-    if nov_key in ep.keys():
-      for i in range(ep[nov_key].shape[0]):
-        noveltruth_video_list.append(ep[nov_key][i])
-      save_video(
-        frames=noveltruth_video_list,
-        video_folder=args.logdir,
-        name_prefix='noveltruth_video_list_' + str(step.value),
-        fps=20,
-      )
+      if 'high_def_nov' in ep.keys():
+        for i in range(ep['high_def_nov'].shape[0]):
+          highdef_noveltruth_video_list.append(ep['high_def_nov'][i])
+        save_video(
+          frames=highdef_noveltruth_video_list,
+          video_folder=args.logdir,
+          name_prefix='highdef_noveltruth_video_list_' + str(step.value),
+          fps=20,
+        )
 
-    if 'high_def_nov' in ep.keys():
-      for i in range(ep['high_def_nov'].shape[0]):
-        highdef_noveltruth_video_list.append(ep['high_def_nov'][i])
-      save_video(
-        frames=highdef_noveltruth_video_list,
-        video_folder=args.logdir,
-        name_prefix='highdef_noveltruth_video_list_' + str(step.value),
-        fps=20,
-      )
+      groundtruth_video_list2 = []
+      if 'image_orignal2' in ep.keys():
+        for i in range(ep['image_orignal2'].shape[0]):
+          groundtruth_video_list2.append(ep['image_orignal2'][i])
+        save_video(
+          frames=groundtruth_video_list2,
+          video_folder=args.logdir,
+          name_prefix='groundtruth_video_list2_'+ str(step.value),
+          fps=20,
+        )
+      groundtruth_video_far_list = []
+      if 'image_far' in ep.keys():
+        for i in range(ep['image_far'].shape[0]):
+          groundtruth_video_far_list.append(ep['image_far'][i])
+        save_video(
+          frames=groundtruth_video_far_list,
+          video_folder=args.logdir,
+          name_prefix='groundtruth_video_far_list_'+ str(step.value),
+          fps=20,
+        )
 
-    groundtruth_video_list2 = []
-    if 'image_orignal2' in ep.keys():
-      for i in range(ep['image_orignal2'].shape[0]):
-        groundtruth_video_list2.append(ep['image_orignal2'][i])
-      save_video(
-        frames=groundtruth_video_list2,
-        video_folder=args.logdir,
-        name_prefix='groundtruth_video_list2_'+ str(step.value),
-        fps=20,
-      )
-    groundtruth_video_far_list = []
-    if 'image_far' in ep.keys():
-      for i in range(ep['image_far'].shape[0]):
-        groundtruth_video_far_list.append(ep['image_far'][i])
-      save_video(
-        frames=groundtruth_video_far_list,
-        video_folder=args.logdir,
-        name_prefix='groundtruth_video_far_list_'+ str(step.value),
-        fps=20,
-      )
+      if 'openl_image2' in model_report.keys():
+        resize_picture_list2 = []
+        video_list_pred2 = []
+        model_video2 = np.clip(255 * model_report['openl_image2'], 0, 255).astype(np.uint8)
+        for i in range(model_video2.shape[0]):
+          resize_picture2 = cv2.resize(model_video2[i], (1024,1024), interpolation=cv2.INTER_AREA)
+          resize_picture_list2.append(resize_picture2)
+          video_list_pred2.append(resize_picture2)
+        save_video(
+          frames=video_list_pred2,
+          video_folder=args.logdir,
+          name_prefix='video_list_pred2_' + str(step.value),
+          fps=20,
+        )
 
-    if 'openl_image2' in model_report.keys():
-      resize_picture_list2 = []
-      video_list_pred2 = []
-      model_video2 = np.clip(255 * model_report['openl_image2'], 0, 255).astype(np.uint8)
-      for i in range(model_video2.shape[0]):
-        resize_picture2 = cv2.resize(model_video2[i], (1024,1024), interpolation=cv2.INTER_AREA)
-        resize_picture_list2.append(resize_picture2)
-        video_list_pred2.append(resize_picture2)
-      save_video(
-        frames=video_list_pred2,
-        video_folder=args.logdir,
-        name_prefix='video_list_pred2_' + str(step.value),
-        fps=20,
-      )
+      if 'openl_image' in model_report.keys():
+        resize_picture_list = []
+        video_list_pred = []
+        model_video = np.clip(255 * model_report['openl_image'], 0, 255).astype(np.uint8)
+        for i in range(model_video.shape[0]):
+          resize_picture = cv2.resize(model_video[i], (1024,1024), interpolation=cv2.INTER_AREA)
+          resize_picture_list.append(resize_picture)
+          video_list_pred.append(resize_picture)
+        save_video(
+          frames=video_list_pred,
+          video_folder=args.logdir,
+          name_prefix='video_list_pred_'+ str(step.value),
+          fps=20,
+        )
 
-    if 'openl_image' in model_report.keys():
-      resize_picture_list = []
-      video_list_pred = []
-      model_video = np.clip(255 * model_report['openl_image'], 0, 255).astype(np.uint8)
-      for i in range(model_video.shape[0]):
-        resize_picture = cv2.resize(model_video[i], (1024,1024), interpolation=cv2.INTER_AREA)
-        resize_picture_list.append(resize_picture)
-        video_list_pred.append(resize_picture)
-      save_video(
-        frames=video_list_pred,
-        video_folder=args.logdir,
-        name_prefix='video_list_pred_'+ str(step.value),
-        fps=20,
-      )
-
-      video_list.draw_picture(args.logdir, str(step.value), groundtruth_video_list, resize_picture_list)
+        video_list.draw_picture(args.logdir, str(step.value), groundtruth_video_list, resize_picture_list)
 
       # video_list_pred_truth = []
       # for i in range(model_video.shape[0]):
@@ -308,7 +309,12 @@ def eval_only(agent, env, logger, args, lag):
   checkpoint.load(args.from_checkpoint, keys=['agent'])
 
   print('Start evaluation loop.')
-  policy = lambda *args: agent.policy(*args, mode='eval')
+  if 'surprise' in args.mode:
+    print('Running Surprise policy')
+    policy = lambda *args: agent.policy(*args, mode='surprise')
+  else:
+    policy = lambda *args: agent.policy(*args, mode='eval')
+  # policy = lambda *args: agent.policy(*args, mode='surprise')
   while step < args.steps:
     driver(policy, steps=100, lag=lag.lagrange_penalty)
     if should_log(step):

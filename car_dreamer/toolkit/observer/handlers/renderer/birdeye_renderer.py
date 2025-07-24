@@ -312,7 +312,7 @@ class BirdeyeRenderer:
         cv2.circle(surface, center=pos, radius=radius, color=color, thickness=cv2.FILLED)
 
     def _render_stop_signs(self, **env_state):
-        stop_sign_state = env_state.get("stop_sign_state")
+        stop_sign_state = env_state.get("stop_sign_state",{})
         stop_signs = self._world_manager.carla_actors("stop")
         for stop_sign in stop_signs:
             if stop_sign.id in stop_sign_state:

@@ -41,7 +41,23 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
-
+CarlaUE4
+Co-Simulation
+PythonAPI
+Engine
+HDMaps
+Import
+Tools
+SafeDreamer
+Plugins
+CARLA_0.9.15.tar.gz
+Dockerfile
+Manifest_DebugFiles_Linux.txt
+AdditionalMaps_0.9.15.tar.gz
+CarlaUE4.sh
+ImportAssets.sh
+CHANGELOG
+README
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.

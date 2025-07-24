@@ -5,7 +5,7 @@ defaults:
   logdir: /dev/null
   replay: uniform
   # Use smalelr replay t osave memory; 1e5 can be suffcient for most tasks
-  replay_size: 1e6
+  replay_size: 1e5 #1e5 #1e6
   replay_online: False
   eval_dir: ""
   filter: ".*"

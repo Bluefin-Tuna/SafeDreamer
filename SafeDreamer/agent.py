@@ -99,22 +99,40 @@ class Agent(nj.Module):
         
         surprises.append(surprise)
         total_newlat_seperate.append(temp_latent)
-    
-      # Find index of minimum surprise
-      surprises = jnp.array(surprises)
-      min_idx = jnp.argmin(surprises)
+
+      if mode=='random':
+        key = jax.random.PRNGKey(0)  # You'll want to pass this key from outside
+        random_idx = jax.random.randint(key, (), 0, len(total_newlat_seperate))
+        
+        # Stack candidates and select using random index
+        stacked_latents = jax.tree_map(
+            lambda *candidates: jnp.stack(candidates, axis=0),
+            *total_newlat_seperate
+        )
+        
+        # Select random latent
+        latent = jax.tree_map(
+            lambda stacked: stacked[random_idx],
+            stacked_latents
+        )
+      else:
+        # Find index of minimum surprise
+        surprises = jnp.array(surprises)
+        min_idx = jnp.argmin(surprises)
+        
+        # Stack candidates and select using advanced indexing
+        stacked_latents = jax.tree_map(
+            lambda *candidates: jnp.stack(candidates, axis=0),
+            *total_newlat_seperate
+        )
       
-      # Stack candidates and select using advanced indexing
-      stacked_latents = jax.tree_map(
-          lambda *candidates: jnp.stack(candidates, axis=0),
-          *total_newlat_seperate
-      )
+        # Select the latent with lowest surprise
+        latent = jax.tree_map(
+            lambda stacked: stacked[min_idx],
+            stacked_latents
+        )
+
       
-      # Select the latent with lowest surprise
-      latent = jax.tree_map(
-          lambda stacked: stacked[min_idx],
-          stacked_latents
-      )
         
     task_outs, task_state = self.task_behavior.policy(latent, task_state)
     expl_outs, expl_state = self.expl_behavior.policy(latent, expl_state)
@@ -315,12 +333,81 @@ class WorldModel(nj.Module):
         masked_data[img_key] = masked_images
     
     return masked_data
+  
+  def randomly_noise_images_per_timestep(self, data, key, mask_value=0.0):
+    """
+    Randomly mask 0 to n-1 images for each timestep, ensuring at least one image remains unmasked.
+    
+    Args:
+        data: Dictionary containing the dataset with image keys
+        key: JAX random key
+        mask_value: Value to use for masked pixels (default: 0.0)
+    
+    Returns:
+        Modified data dictionary with randomly masked images
+    """
+    # Create a copy of the data to avoid modifying the original
+    masked_data = data.copy()
+    
+    # Image keys to process
+    image_keys = ['image', 'image2', 'image3']
+    available_keys = [k for k in image_keys if k in data]
+    
+    if len(available_keys) == 0:
+        return masked_data
+    
+    n_images = len(available_keys)
+    batch_size, seq_len = data[available_keys[0]].shape[0], data[available_keys[0]].shape[1]  # 16, 64
+    
+    # Split keys
+    key1, key2 = random.split(key)
+    
+    # For each (batch, timestep), randomly choose how many images to mask (0 to n-1)
+    num_to_mask = random.randint(key1, shape=(batch_size, seq_len), minval=0, maxval=n_images)
+    
+    # Generate random values for each image at each (batch, timestep)
+    # Shape: [batch_size, seq_len, n_images]
+    random_vals = random.uniform(key2, shape=(batch_size, seq_len, n_images))
+    
+    # Sort the random values to get rankings (0 = smallest, n_images-1 = largest)
+    rankings = jnp.argsort(random_vals, axis=-1)
+    
+    # Create a mask where we mask images with ranking < num_to_mask
+    # This gives us a random selection of num_to_mask images
+    mean = 0.0
+    std = 3.0
+    mask_matrix = mean + std * random.normal(key2, (batch_size, seq_len, n_images))  # mean=0, std=1 #jnp.zeros((batch_size, seq_len, n_images), dtype=bool)
+    
+    for i in range(n_images):
+        # For each image position, check if its ranking is less than num_to_mask
+        image_rank = jnp.where(rankings == i, 
+                              jnp.arange(n_images)[None, None, :], 
+                              n_images)  # Set to n_images if not this image
+        min_rank = jnp.min(image_rank, axis=-1)  # Get the ranking for image i
+        should_mask = min_rank < num_to_mask
+        mask_matrix = mask_matrix.at[:, :, i].set(should_mask)
+    
+    # Apply masks to each image
+    for i, img_key in enumerate(available_keys):
+        images = data[img_key]
+        
+        # Expand mask to match image dimensions
+        mask = mask_matrix[:, :, i].reshape(batch_size, seq_len, 1, 1, 1)
+        
+        # Apply mask: where mask is True, replace with mask_value
+        masked_images = jnp.where(mask, mask_value, images)
+        
+        # Update the data dictionary
+        masked_data[img_key] = masked_images
+    
+    return masked_data
 
   def loss(self, data, state):
     # print('Processing data')
     # Method 2: Mask individual timesteps independently
     key = random.PRNGKey(42)
-    data = self.randomly_mask_images_per_timestep(data, key, mask_value=0.0)
+    #data = self.randomly_mask_images_per_timestep(data, key, mask_value=0.0)
+    # data = self.randomly_noise_images_per_timestep(data, key, mask_value=0.0)
     
     embed = self.encoder(data)
     embed_separate = self.encoder_separate(data)

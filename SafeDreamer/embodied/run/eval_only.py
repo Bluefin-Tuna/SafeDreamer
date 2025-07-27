@@ -312,15 +312,25 @@ def eval_only(agent, env, logger, args, lag):
   if 'surprise' in args.mode:
     print('Running Surprise policy')
     policy = lambda *args: agent.policy(*args, mode='surprise')
+  elif 'random' in args.mode:
+    print('Running Random policy')
+    policy = lambda *args: agent.policy(*args, mode='random')
   else:
     policy = lambda *args: agent.policy(*args, mode='eval')
   # policy = lambda *args: agent.policy(*args, mode='surprise')
+  times = 2
+  cnt = 0
   while step < args.steps:
     driver(policy, steps=100, lag=lag.lagrange_penalty)
     if should_log(step):
       logger.add(metrics.result())
       logger.add(timer.stats(), prefix='timer')
       logger.write(fps=True)
+      cnt+=1
+
+    if cnt == times:
+      break
+
   logger.write()
   #video_list.store_video(args.logdir)
   #video_list.draw_picture(args.logdir)

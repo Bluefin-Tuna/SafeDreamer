@@ -25,7 +25,7 @@ defaults:
 
   run:
     script: train
-    steps: 1e4 #1e10
+    steps: 2e5 #1e4 #1e10
     expl_until: 0
     log_every: 300
     save_every: 900
@@ -37,7 +37,7 @@ defaults:
     train_fill: 0
     eval_fill: 0
     log_zeros: False
-    log_keys_video: [image, image2]
+    log_keys_video: [image, image2, image3]
     log_keys_sum: '^$'
     log_keys_mean: 'log_entropy|log_plan_action_mean|log_plan_action_std|log_plan_num_safe_traj|log_plan_ret|log_plan_cost|log_plan_penalty|log_plan_lagrange_multiplier|log_plan_penalty_multiplier|log_lagrange_penalty|log_lagrange_p|log_lagrange_i|log_lagrange_d'
     log_keys_max: 'log_entropy|log_plan_action_mean|log_plan_action_std|log_plan_num_safe_traj|log_plan_ret|log_plan_cost|log_plan_penalty|log_plan_lagrange_multiplier|log_plan_penalty_multiplier|log_lagrange_penalty|log_lagrange_p|log_lagrange_i|log_lagrange_d'
@@ -47,6 +47,7 @@ defaults:
     actor_addr: 'ipc:///tmp/5551'
     actor_batch: 32
     mode: ''
+    logdir_algo: ''
 
   envs: {amount: 1, parallel: process, length: 0, reset: True, restart: True, discretize: 0, checks: False}
   wrapper: {length: 0, reset: True, discretize: 0, checks: False}
@@ -134,7 +135,7 @@ bsrp_lag:
   pessimistic: True
   run:
     script: train_eval
-    steps: 1e7
+    steps: 1e6
     eval_every: 1e4
     eval_initial: False
     eval_eps: 1
@@ -164,7 +165,7 @@ osrp:
   planner: {horizon: 15, num_samples: 500, num_elites: 50, mixture_coef: 0.00, init_std: 1.0}
   run:
     script: train_eval
-    steps: 1e7
+    steps: 2e5 #1e6
     eval_every: 1e4
     eval_initial: False
     eval_eps: 1
@@ -196,7 +197,7 @@ osrp_lag:
 
   run:
     script: train_eval
-    steps: 1e7
+    steps: 1e6
     eval_every: 1e4
     eval_initial: False
     eval_eps: 1
@@ -227,7 +228,7 @@ osrp_vector:
   run.train_ratio: 512
   run:
     script: train_eval
-    steps: 1e7
+    steps: 1e6
     eval_every: 1e4
     eval_initial: False
     eval_eps: 1
@@ -256,7 +257,7 @@ dreamerv3:
   run.train_ratio: 512
   run:
     script: train_eval
-    steps: 1e7
+    steps: 1e6
     eval_every: 1e4
     eval_initial: False
     eval_eps: 1
@@ -285,7 +286,7 @@ dreamerv3_vector:
   run.train_ratio: 512
   run:
     script: train_eval
-    steps: 1e7
+    steps: 1e6
     eval_every: 1e4
     eval_initial: False
     eval_eps: 1
@@ -310,7 +311,7 @@ cem:
   run.train_ratio: 512
   run:
     script: train_eval
-    steps: 1e7
+    steps: 1e6
     eval_every: 1e4
     eval_initial: False
     eval_eps: 1
@@ -335,7 +336,7 @@ cem_vector:
   run.train_ratio: 512
   run:
     script: train_eval
-    steps: 1e7
+    steps: 2e5 #1e6
     eval_every: 1e4
     eval_initial: False
     eval_eps: 1

@@ -28,23 +28,26 @@ def main(argv=None):
   parsed, other = embodied.Flags(configs=['defaults']).parse_known(argv)
   config = embodied.Config(agt.Agent.configs['defaults'])
   now_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-  config = config.update({
-    'task': 'safetygym_SafetyPointGoal2-v0'
-  })
+  # config = config.update({
+  #   'task': 'safetygym_SafetyPointGoal1-v0'
+  # })
   for name in parsed.configs:
     config = config.update(agt.Agent.configs[name])
   config = embodied.Flags(config).parse(other)
    #now_time + '_' + str(config.method) + '_' + str(config.task) + '_' + str(config.seed)
-  logdir_algo = 'temp_geigh_3'
+  # logdir_algo = 'cargoal_1_standard'
+  logdir_algo = 'cargoal_1_geigh_3' if config.run.logdir_algo == '' else config.run.logdir_algo
+  # logdir_algo = 'cargoal_1_geigh_3'
   print('args mode: ',config.run.mode)
+  print('args step: ',config.run.steps)
   logdir_path = logdir_algo + '_' + config.run.mode if config.run.mode != '' else logdir_algo
   config = config.update({
       'logdir': f'~/logdir/{logdir_path}-safedreamer'
   })
   args = embodied.Config(
       **config.run, use_cost=config.use_cost,
-      batch_steps=config.batch_size * config.batch_length, logdir=config.logdir, task='safetygym_SafetyPointGoal2-v0')
-
+      batch_steps=config.batch_size * config.batch_length, logdir=config.logdir, task=config.task)
+  print(args.steps)
   os.environ['CUDA_VISIBLE_DEVICES'] = str(config.jax.logical_gpus)
 
   logdir_path = logdir_algo + '_' + args.mode if args.mode != '' else logdir_algo

@@ -1,5 +1,6 @@
 import functools
 import os
+import random
 
 import embodied
 import numpy as np
@@ -112,14 +113,28 @@ class SafetyGym(embodied.Env):
         np.random.seed(0)
         # Add novel changes here:
         nov_key = self._mode.split('_')[-1]
-        
+        available_keys = ['image','image2']
+        if nov_key not in available_keys:
+          nov_key = random.choice(available_keys)
+          # print(nov_key)
         if 'jitter' in self._mode:
           obs['high_def_nov'] = obs['image_orignal'].copy()
           # print('Mode switch')
           # 1. Apply color jitter to simulate lighting variation
           image_jitter = obs[nov_key].astype(np.float32)
-          brightness_factor = np.random.uniform(5, 6)
-          contrast_factor = np.random.uniform(5, 6)
+          brightness_factor = np.random.uniform(20, 30)
+          contrast_factor = np.random.uniform(20, 30)
+          image_jitter = np.clip(image_jitter * contrast_factor + brightness_factor * 10, 0, 255).astype(np.uint8)
+          obs[nov_key] = image_jitter
+          obs['high_def_nov'] = np.clip(obs['high_def_nov'].astype(np.float32) * contrast_factor + brightness_factor * 10, 0, 255).astype(np.uint8)
+
+        if 'glare' in self._mode:
+          obs['high_def_nov'] = obs['image_orignal'].copy()
+          # print('Mode switch')
+          # 1. Apply color jitter to simulate lighting variation
+          image_jitter = obs[nov_key].astype(np.float32)
+          brightness_factor = np.random.uniform(20, 30)
+          contrast_factor = 0
           image_jitter = np.clip(image_jitter * contrast_factor + brightness_factor * 10, 0, 255).astype(np.uint8)
           obs[nov_key] = image_jitter
           obs['high_def_nov'] = np.clip(obs['high_def_nov'].astype(np.float32) * contrast_factor + brightness_factor * 10, 0, 255).astype(np.uint8)
@@ -140,7 +155,7 @@ class SafetyGym(embodied.Env):
           occlusion_mask = obs[nov_key].copy()
           h, w, _ = occlusion_mask.shape
           x, y = np.random.randint(0, w//2), np.random.randint(0, h//2)
-          mask_w, mask_h = np.random.randint(20, 40), np.random.randint(20, 40)
+          mask_w, mask_h = np.random.randint(35, 40), np.random.randint(35, 40)
           occlusion_mask[y:y+mask_h, x:x+mask_w] = 0
           # obs['image_occlusion'] = occlusion_mask
           obs[nov_key] = occlusion_mask

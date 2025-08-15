@@ -5,7 +5,7 @@ defaults:
   logdir: /dev/null
   replay: uniform
   # Use smalelr replay t osave memory; 1e5 can be suffcient for most tasks
-  replay_size: 1e5 #1e5 #1e6
+  replay_size: 8e4 #1e5 #1e6
   replay_online: False
   eval_dir: ""
   filter: ".*"
@@ -24,7 +24,7 @@ defaults:
 
   run:
     script: train
-    steps: 1e8
+    steps: 250000 #1e8
     expl_until: 0
     log_every: 1000
     save_every: 2000
@@ -42,6 +42,7 @@ defaults:
     log_keys_max: "^$"
     from_checkpoint: ""
     sync_every: 10
+    mode: ''
 
   envs:
     {

@@ -7,6 +7,10 @@ import ruamel.yaml as yaml
 
 import car_dreamer
 import dreamerv3
+import os
+import signal
+import sys
+import time
 
 warnings.filterwarnings("ignore", ".*truncated to dtype int32.*")
 
@@ -33,6 +37,31 @@ def wrap_env(env, config):
             env = embodied.wrappers.ClipAction(env, name)
     return env
 
+import subprocess
+import re
+
+def get_pids(port):
+    command = f"sudo lsof -i :{port} | awk '{{print $2}}'"
+    pids = subprocess.check_output(command, shell=True, text=True)  # decode to str
+    pids = pids.strip()
+    if pids:
+        for pid in pids.split('\n'):
+            try:
+                yield int(pid)
+            except ValueError:
+                pass
+
+def kill_processes_on_ports(ports):
+    for port in ports:
+        pids = set(get_pids(port))
+        if pids:
+            # Try graceful shutdown first
+            subprocess.run(['sudo', 'kill', '-15'] + list(map(str, pids)))
+            time.sleep(2)
+            # Force kill if still alive
+            remaining = set(get_pids(port))
+            if remaining:
+                subprocess.run(['sudo', 'kill', '-9'] + list(map(str, remaining)))
 
 def eval_only(agent, env, logger, args):
     print("Start evaluation.")
@@ -99,10 +128,23 @@ def eval_only(agent, env, logger, args):
         raise ValueError("No checkpoint specified.")
 
     print("Start evaluation loop.")
-    policy = lambda *args: agent.policy(*args, mode="eval")
+    print(args.mode)
+    if 'surprise' in args.mode:
+        if 'full' in args.mode:
+            policy = lambda *args: agent.policy(*args, mode="surprise_full")
+        else:
+            policy = lambda *args: agent.policy(*args, mode="surprise")
+    elif 'random' in args.mode:
+        policy = lambda *args: agent.policy(*args, mode="random")
+    elif 'sample' in args.mode:
+        policy = lambda *args: agent.policy(*args, mode="sample")
+    else:
+        policy = lambda *args: agent.policy(*args, mode="eval")
+
     while step < args.steps:
         driver(policy, steps=100)
     logger.write()
+    
 
 
 def main(argv=None):
@@ -140,7 +182,7 @@ def main(argv=None):
             "run.log_keys_sum": "(travel_distance|destination_reached|out_of_lane|time_exceeded|is_collision|timesteps)",
             "run.log_keys_mean": "(travel_distance|ttc|speed_norm|wpt_dis)",
             "run.log_keys_max": "(travel_distance|ttc|speed_norm|wpt_dis)",
-            "run.steps": 5e4,
+            "run.steps": 15000,
         }
     )
 
@@ -151,7 +193,14 @@ def main(argv=None):
         batch_steps=dreamerv3_config.batch_size * dreamerv3_config.batch_length,
     )
     eval_only(agent, env, logger, args)
+    print('Done with Eval. Killing Carla.')
+    env.close()
+    kill_processes_on_ports([2000, 8000, 9000])
 
+    
+    # import sys
+    # sys.exit(0)
 
+               
 if __name__ == "__main__":
     main()

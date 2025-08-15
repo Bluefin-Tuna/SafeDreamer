@@ -5,7 +5,7 @@ import carla
 import gym
 import numpy as np
 from gym import spaces
-
+import random
 from .toolkit import EnvMonitorOpenCV, Observer, WorldManager
 
 
@@ -21,6 +21,9 @@ class CarlaBaseEnv(gym.Env):
 
         self.action_space = self._get_action_space()
         self.observation_space = self._get_observation_space()
+
+        # Lag buffer for multi-frame lag simulation
+        self._lag_buffer = {}  # {key: [frame1, frame2, ...]}
 
     @abstractmethod
     def on_reset(self) -> None:
@@ -154,9 +157,27 @@ class CarlaBaseEnv(gym.Env):
             **reward_info,
             "action": action,
         }
+        # print('Is eval true?: ',self._config.eval)
+        # print('Obs keys: ',self.obs.keys())
+        # print('Mode being used: ',self._config.mode)
+        if self._config.mode != '' and 'Default' not in self._config.mode:
+             # --- Store current obs in lag buffer ---
+            if 'lag' in self._config.mode:
+                for k, v in self.obs.items():
+                    if k not in self._lag_buffer:
+                        self._lag_buffer[k] = []
+                    self._lag_buffer[k].append(v.copy())
+                    # Keep only the last 10 frames (or any desired max lag)
+                    if len(self._lag_buffer[k]) > 100:
+                        self._lag_buffer[k].pop(0)
+
+            
+            self._simulate_failure()
+
         if self._config.eval:
             info = {f"eval_{k}": v for k, v in info.items()}
             self.obs = {**self.obs, **info}
+
         if self._config.display.enable:
             self._render(self.obs, info)
 
@@ -171,3 +192,81 @@ class CarlaBaseEnv(gym.Env):
 
     def _render(self, obs, info):
         self._monitor.render(obs, info)
+
+    def _simulate_failure(self):
+        np.random.seed(0)
+
+        number_of_failures = int(self._config.mode.split('_')[-1])
+        # available_keys = [
+        #     "birdeye_gt",
+        #     "birdeye_raw",
+        #     "birdeye_with_traffic_lights",
+        #     "birdeye_wpt",
+        #     "camera",
+        #     "lidar"
+        # ]
+        
+        available_keys = [
+            "birdeye_wpt"
+        ]
+
+        # Always sample a list of keys
+        nov_keys = random.sample(available_keys, number_of_failures)
+
+        # Helper: apply transformation to a single key
+        def apply_jitter(key):
+            img = self.obs[key].astype(np.float32)
+            brightness = np.random.uniform(20, 30)
+            contrast = np.random.uniform(20, 30)
+            img = np.clip(img * contrast + brightness * 10, 0, 255).astype(np.uint8)
+            self.obs[key] = img
+
+        def apply_glare(key):
+            img = self.obs[key].astype(np.float32)
+            brightness = np.random.uniform(20, 30)
+            img = np.clip(img * 0 + brightness * 10, 0, 255).astype(np.uint8)
+            self.obs[key] = img
+
+        def apply_gaussian(key):
+            noise = np.random.normal(20, 30, self.obs[key].shape).astype(np.uint8)
+            self.obs[key] = np.clip(self.obs[key] + noise, 0, 255)
+
+        def apply_gaussianlite(key):
+            noise = np.random.normal(4, 6, self.obs[key].shape).astype(np.uint8)
+            self.obs[key] = np.clip(self.obs[key] + noise, 0, 255)
+
+        def apply_occlusion(key):
+            img = self.obs[key].copy()
+            h, w, _ = img.shape
+            x, y = np.random.randint(0, w//2), np.random.randint(0, h//2)
+            mask_w, mask_h = np.random.randint(35, 40), np.random.randint(35, 40)
+            img[y:y+mask_h, x:x+mask_w] = 0
+            self.obs[key] = img
+
+        def apply_channelswap(key):
+            self.obs[key] = self.obs[key][..., np.random.permutation(3)]
+        
+        def apply_lag_sensor(key):
+            """Simulate multi-frame lag by using an older observation."""
+            if key in self._lag_buffer and len(self._lag_buffer[key]) > 1:
+                max_lag = min(75, len(self._lag_buffer[key]) - 1)  # up to 5 steps back
+                lag_steps = np.random.randint(1, max_lag + 1)
+                self.obs[key] = self._lag_buffer[key][-lag_steps].copy()
+
+
+        # Loop over keys and modes
+        for key in nov_keys:
+            if 'jitter' in self._config.mode:
+                apply_jitter(key)
+            if 'glare' in self._config.mode:
+                apply_glare(key)
+            if 'gaussian' in self._config.mode:
+                apply_gaussian(key)
+            if 'occlusion' in self._config.mode:
+                apply_occlusion(key)
+            if 'channelswap' in self._config.mode:
+                apply_channelswap(key)
+            if 'lag' in self._config.mode:
+                apply_lag_sensor(key)
+            if 'gaulite' in self._config.mode:
+                apply_gaussianlite(key)

@@ -1,0 +1,77 @@
+#!/bin/bash
+cd ..
+set -e
+
+PORT=2000
+GPU=0
+
+# Base checkpoints for augment_high
+declare -A BASE_CHECKPOINTS_AUGMENT_HIGH=(
+  ["carla_four_lane"]="./logdir/carla_four_lane_sensor_6_augment_high/checkpoint.ckpt"
+  ["carla_right_turn_simple"]="./logdir/carla_right_turn_simple_sensor_6_augment_high/checkpoint.ckpt"
+  ["carla_stop_sign"]="./logdir/carla_stop_sign_sensor_6_augment_high/checkpoint.ckpt"
+)
+
+# Base checkpoints for dropout
+declare -A BASE_CHECKPOINTS_DROPOUT=(
+  ["carla_four_lane"]="./logdir/carla_four_lane_sensor_6_dropout/checkpoint.ckpt"
+  ["carla_right_turn_simple"]="./logdir/carla_right_turn_simple_sensor_6_dropout/checkpoint.ckpt"
+  ["carla_stop_sign"]="./logdir/carla_stop_sign_sensor_6_dropout/checkpoint.ckpt"
+)
+
+# Base checkpoints for default
+declare -A BASE_CHECKPOINTS_DEFAULT=(
+  ["carla_four_lane"]="./logdir/carla_four_lane_sensor_6/checkpoint.ckpt"
+  ["carla_right_turn_simple"]="./logdir/carla_right_turn_simple_sensor_6/checkpoint.ckpt"
+  ["carla_stop_sign"]="./logdir/carla_stop_sign_sensor_6/checkpoint.ckpt"
+)
+
+# Base checkpoints for default
+declare -A BASE_CHECKPOINTS_PROJECT=(
+  ["carla_four_lane"]="./logdir/carla_four_lane_bev_proj/checkpoint.ckpt"
+  ["carla_right_turn_simple"]="./logdir/carla_right_turn_bev_proj/checkpoint.ckpt"
+  ["carla_stop_sign"]="./logdir/carla_stop_sign_sensor_bev_proj/checkpoint.ckpt"
+)
+
+# Base checkpoints for default
+declare -A BASE_CHECKPOINTS_PIXEL=(
+  ["carla_four_lane"]="./logdir/carla_four_lane_bev_proj/checkpoint.ckpt"
+  ["carla_right_turn_simple"]="./logdir/carla_right_turn_bev_proj/checkpoint.ckpt"
+  ["carla_stop_sign"]="./logdir/carla_stop_sign_bev_pixel/checkpoint.ckpt"
+)
+
+# Scenarios
+SCENARIOS=("carla_stop_sign") #"carla_right_turn_simple" "carla_stop_sign")
+AUG_TYPES=("gaulite")
+AUG_LEVELS=(1)
+
+run_eval() {
+  local checkpoint="$1"
+  local variant="$2"
+  local scenario="$3"
+  echo "Running: $variant on $scenario"
+  bash eval_dm3_sequential.sh "$PORT" "$GPU" "$checkpoint" "$variant" "$scenario"
+}
+
+# echo "=== Running Augment High Default ==="
+# for scenario in "${SCENARIOS[@]}"; do
+#   run_eval "${BASE_CHECKPOINTS_PROJECT[$scenario]}" "Default" "$scenario"
+# done
+
+# echo "=== Running Single Projection Default ==="
+# for scenario in "${SCENARIOS[@]}"; do
+#   for aug in "${AUG_TYPES[@]}"; do
+#     for level in "${AUG_LEVELS[@]}"; do
+#       run_eval "${BASE_CHECKPOINTS_PROJECT[$scenario]}" "sample_Default" "$scenario"
+#     done
+#   done
+# done
+
+echo "=== Running Single Projection Augmentations ==="
+for scenario in "${SCENARIOS[@]}"; do
+  for aug in "${AUG_TYPES[@]}"; do
+    for level in "${AUG_LEVELS[@]}"; do
+      run_eval "${BASE_CHECKPOINTS_PIXEL[$scenario]}" "sample_${aug}_1" "$scenario"
+    done
+  done
+done

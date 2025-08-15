@@ -51,8 +51,8 @@ carla_four_lane:
       - [15.6, -58, 0.1]
 
   dreamerv3:
-    encoder.cnn_keys: 'camera|birdeye_wpt|lidar|birdeye_raw|birdeye_with_traffic_lights|birdeye_gt' #"birdeye_wpt"
-    decoder.cnn_keys: 'camera|birdeye_wpt|lidar|birdeye_raw|birdeye_with_traffic_lights|birdeye_gt' #"birdeye_wpt"
+    encoder.cnn_keys: "birdeye_wpt" #'camera|birdeye_wpt|lidar|birdeye_raw|birdeye_with_traffic_lights|birdeye_gt' #Used for multiple Representations
+    decoder.cnn_keys: "birdeye_wpt" #'camera|birdeye_wpt|lidar|birdeye_raw|birdeye_with_traffic_lights|birdeye_gt' #Used for multiple Representations
     run.log_keys_video: [camera, birdeye_wpt, lidar]
     run.log_keys_max: "collision"
 
@@ -129,8 +129,8 @@ carla_right_turn_simple: &carla_right_turn_simple
     flow_spawn_point: [-3.4, -151.2, 0.1, 90.0]
 
   dreamerv3:
-    encoder.cnn_keys: 'camera|birdeye_wpt|lidar|birdeye_raw|birdeye_with_traffic_lights|birdeye_gt'
-    decoder.cnn_keys: 'camera|birdeye_wpt|lidar|birdeye_raw|birdeye_with_traffic_lights|birdeye_gt'
+    encoder.cnn_keys: "birdeye_wpt" #'camera|birdeye_wpt|lidar|birdeye_raw|birdeye_with_traffic_lights|birdeye_gt'
+    decoder.cnn_keys: "birdeye_wpt" #'camera|birdeye_wpt|lidar|birdeye_raw|birdeye_with_traffic_lights|birdeye_gt'
     run.log_keys_video: [camera, birdeye_wpt, lidar]
 
   dreamerv2:
@@ -370,8 +370,8 @@ carla_stop_sign:
       render_keys: [camera, birdeye_with_traffic_lights]
 
   dreamerv3:
-    encoder.cnn_keys: "camera|birdeye_wpt|lidar|birdeye_raw|birdeye_with_traffic_lights|birdeye_gt"
-    decoder.cnn_keys: "camera|birdeye_wpt|lidar|birdeye_raw|birdeye_with_traffic_lights|birdeye_gt"
+    encoder.cnn_keys: "birdeye_wpt" #"camera|birdeye_wpt|lidar|birdeye_raw|birdeye_with_traffic_lights|birdeye_gt"
+    decoder.cnn_keys: "birdeye_wpt" #"camera|birdeye_wpt|lidar|birdeye_raw|birdeye_with_traffic_lights|birdeye_gt"
     run.log_keys_video: [camera, birdeye_with_traffic_lights, lidar]
 
   dreamerv2:

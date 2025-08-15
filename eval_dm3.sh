@@ -2,7 +2,7 @@
 
 # Check if a port argument is provided
 if [ $# -lt 4 ]; then
-    echo "Usage: $0 <carla_port> <gpu_device> <checkpoint_path> [additional_eval_parameters]"
+    echo "Usage: $0 <carla_port> <gpu_device> <checkpoint_path> <mode> <task>"
     exit 1
 fi
 
@@ -10,13 +10,21 @@ fi
 CARLA_PORT=$1
 GPU_DEVICE=$2
 CHECKPOINT_PATH=$3
-LOG_FILE="eval_log_${CARLA_PORT}.log"
+MODE=$4
+TASK=$5
+
+
+DIR_NAME=$(basename "$(dirname "$CHECKPOINT_PATH")")
+
+LOG_FILE="logdir/evals/eval_log_${CARLA_PORT}_${MODE}.log"
+LOG_DIR="logdir/evals/${DIR_NAME}_${TASK}_${MODE}"
+
 CARLA_SERVER_COMMAND="$CARLA_ROOT/CarlaUE4.sh -RenderOffScreen -carla-port=$CARLA_PORT -benchmark -fps=10"
 EVAL_SCRIPT="dreamerv3/eval.py"
-COMMON_PARAMS="--env.world.carla_port $CARLA_PORT --dreamerv3.jax.policy_devices $GPU_DEVICE --dreamerv3.run.from_checkpoint $CHECKPOINT_PATH"
-ADDITIONAL_PARAMS="${@:4}"  # Capture all additional parameters passed to the script
+COMMON_PARAMS="--env.world.carla_port $CARLA_PORT --dreamerv3.jax.policy_devices $GPU_DEVICE --dreamerv3.run.from_checkpoint $CHECKPOINT_PATH --dreamerv3.run.mode $MODE --env.mode $MODE --dreamerv3.logdir $LOG_DIR --task $TASK"
+ADDITIONAL_PARAMS="${@:6}"  # Capture all additional parameters passed to the script
 EVAL_COMMAND="python -u $EVAL_SCRIPT $COMMON_PARAMS $ADDITIONAL_PARAMS"
-
+echo $ADDITIONAL_PARAMS
 # Clear log file before starting
 > $LOG_FILE
 

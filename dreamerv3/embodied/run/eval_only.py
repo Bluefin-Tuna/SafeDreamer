@@ -57,10 +57,16 @@ def eval_only(agent, env, logger, args):
 
     print("Start evaluation loop.")
     policy = lambda *args: agent.policy(*args, mode="eval")
+    cnt = 0
+    print('CNT starting')
     while step < args.steps:
-        driver(policy, steps=100)
+        driver(policy, steps=5000)
         if should_log(step):
             logger.add(metrics.result())
             logger.add(timer.stats(), prefix="timer")
             logger.write(fps=True)
+        cnt+=1
+        print(cnt)
+        if cnt > 5:
+            break
     logger.write()

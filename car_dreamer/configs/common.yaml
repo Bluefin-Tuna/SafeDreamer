@@ -1,5 +1,6 @@
 env:
   eval: False
+  mode: ''
 
   world:
     carla_port: 2000

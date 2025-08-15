@@ -1,9 +1,11 @@
 import jax
+import numpy as np
 import jax.numpy as jnp
-
+import random as py_rand
+from jax import random
 tree_map = jax.tree_util.tree_map
 sg = lambda x: tree_map(jax.lax.stop_gradient, x)
-
+import itertools
 import logging
 
 logger = logging.getLogger()
@@ -49,7 +51,166 @@ class Agent(nj.Module):
         obs = self.preprocess(obs)
         (prev_latent, prev_action), task_state, expl_state = state
         embed = self.wm.encoder(obs)
-        latent, _ = self.wm.rssm.obs_step(prev_latent, prev_action, embed, obs["is_first"])
+        latent, prior_orig = self.wm.rssm.obs_step(prev_latent, prev_action, embed, obs["is_first"])
+        if mode not in ['train', 'eval', 'explore']:
+            available_keys = ["birdeye_gt","birdeye_raw","birdeye_with_traffic_lights","birdeye_wpt","camera","lidar"]
+            if 'surprise' in mode:
+                used_keys = ['None'] + available_keys
+                used_keys = np.array(used_keys)
+                total_newlat_seperate = []
+                surprises = []
+                # Compute baseline surprise
+                base_surprise = self.wm.rssm.get_dist(latent).kl_divergence(self.wm.rssm.get_dist(prior_orig))
+                if 'full' in mode:
+                    # Iterate over all combinations of keys (masking 1, 2, ..., N keys)
+                    for r in range(1, len(available_keys) + 1):
+                        for combo in itertools.combinations(available_keys, r):
+                            obs_masked = jax.tree_map(lambda x: x, obs)
+                            
+                            # Mask all keys in the current combination
+                            for key in combo:
+                                obs_masked[key] = jnp.zeros(obs[key].shape, dtype=float)
+
+                            # Encode and compute surprise
+                            embed = self.wm.encoder(obs_masked)
+                            temp_latent, temp_prior_orig = self.wm.rssm.obs_step(
+                                prev_latent, prev_action, embed, obs['is_first']
+                            )
+                            surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(
+                                self.wm.rssm.get_dist(temp_prior_orig)
+                            )
+
+                            surprises.append(surprise)
+                            total_newlat_seperate.append(temp_latent)
+                else: #Run N version
+                    # Mask each key individually and compute surprise
+                    # for ite, image_key in enumerate(available_keys): #Masks each one at a time:
+                    #     obs_masked = jax.tree_map(lambda x: x, obs)
+                    #     obs_masked[image_key] = jnp.zeros(obs[image_key].shape, dtype=float)
+                    #     embed = self.wm.encoder(obs_masked)
+
+                    #     temp_latent, temp_prior_orig = self.wm.rssm.obs_step(
+                    #     prev_latent, prev_action, embed, obs['is_first'])
+
+                    #     surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(
+                    #         self.wm.rssm.get_dist(temp_prior_orig))
+                    
+                        
+                    #     surprises.append(surprise)
+                    #     total_newlat_seperate.append(temp_latent)
+                    for ite, image_key in enumerate(available_keys): #Keeps only one sensor at a time:
+                        # Start with all observations as zeros
+                        obs_masked = jax.tree_map(lambda x: jnp.zeros_like(x), obs)
+                        
+                        # Keep only the current image_key unmasked (use original data)
+                        obs_masked[image_key] = obs[image_key]
+                        
+                        embed = self.wm.encoder(obs_masked)
+
+                        temp_latent, temp_prior_orig = self.wm.rssm.obs_step(
+                            prev_latent, prev_action, embed, obs['is_first'])
+
+                        surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(
+                            self.wm.rssm.get_dist(temp_prior_orig))
+
+                        surprises.append(surprise)
+                        total_newlat_seperate.append(temp_latent)
+
+                    #Sort sensors by surprise (lowest surprise first)
+                    surprises_init = jnp.array(surprises)
+                    sorted_indices = jnp.argsort(surprises_init)
+
+                    #Create N more latents by iteratively masking according to the order of sorted indices:
+                    obs_iter = jax.tree_map(lambda x: x, obs)
+                    for i in range(len(sorted_indices)):
+                        idx = sorted_indices[i] # 
+                        # Use conditional masking for each key based on sorted order
+                        for j, key_name in enumerate(available_keys):
+                            # Check if this key should be masked at this step (idx matches the key's position)
+                            should_mask = (idx == j)
+                            obs_iter[key_name] = jnp.where(
+                                should_mask,
+                                jnp.zeros_like(obs_iter[key_name]),
+                                obs_iter[key_name]
+                            )
+                        
+                        embed = self.wm.encoder(obs_iter)
+                        temp_latent, temp_prior_orig = self.wm.rssm.obs_step(
+                            prev_latent, prev_action, embed, obs['is_first'])
+                        surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(
+                            self.wm.rssm.get_dist(temp_prior_orig))
+                        
+                        surprises.append(surprise)
+                        total_newlat_seperate.append(temp_latent)
+                
+                total_newlat_seperate.append(latent)
+                surprises.append(base_surprise)
+                # Find index of minimum surprise
+                surprises = jnp.array(surprises)
+                min_idx = jnp.argmin(surprises)
+                
+                # Stack candidates and select using advanced indexing
+                stacked_latents = jax.tree_map(
+                    lambda *candidates: jnp.stack(candidates, axis=0),
+                    *total_newlat_seperate
+                )
+            
+                # Select the latent with lowest surprise
+                latent = jax.tree_map(
+                    lambda stacked: stacked[min_idx],
+                    stacked_latents
+                )
+                latent = {k: v[min_idx] for k, v in stacked_latents.items() if k != "image_key"} # I dont think this does anything.
+
+            elif 'random' in mode: # mode == 'random':
+                k = py_rand.randint(0, len(available_keys))  # actual number of keys chosen
+                chosen_keys = py_rand.sample(available_keys, k)
+                obs_masked = jax.tree_map(lambda x: x, obs)
+                for ite, image_key in enumerate(chosen_keys):
+                    obs_masked[image_key] = jnp.zeros(obs[image_key].shape, dtype=float)
+                embed = self.wm.encoder(obs_masked)
+                latent, temp_prior_orig = self.wm.rssm.obs_step(
+                    prev_latent, prev_action, embed, obs['is_first'])
+            elif 'sample' in mode: #Expects that we are using one representation.
+                base_surprise = self.wm.rssm.get_dist(latent).kl_divergence(self.wm.rssm.get_dist(prior_orig))
+                total_newlat_seperate = []
+                surprises = []
+                image_key = self.wm.config.encoder.cnn_keys
+                n_samples = 10
+                key = random.PRNGKey(42)
+                for diffusion_coef in np.linspace(0.0, 1, n_samples, endpoint=True):
+                    sampled_obs = jax.tree_map(lambda x: x, obs)
+                    sampled_obs = self.wm.randomly_dropout_pixels_diffuse(sampled_obs, key, mask_value=diffusion_coef)
+                    embed = self.wm.encoder(sampled_obs)
+
+                    temp_latent, temp_prior_orig = self.wm.rssm.obs_step(
+                    prev_latent, prev_action, embed, obs['is_first'])
+
+                    surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(
+                        self.wm.rssm.get_dist(temp_prior_orig))
+                
+                    surprises.append(surprise)
+                    total_newlat_seperate.append(temp_latent)
+
+                total_newlat_seperate.append(latent)
+                surprises.append(base_surprise)
+
+                surprises = jnp.array(surprises)
+                min_idx = jnp.argmin(surprises)
+                
+                # Stack candidates and select using advanced indexing
+                stacked_latents = jax.tree_map(
+                    lambda *candidates: jnp.stack(candidates, axis=0),
+                    *total_newlat_seperate
+                )
+            
+                # Select the latent with lowest surprise
+                latent = jax.tree_map(
+                    lambda stacked: stacked[min_idx],
+                    stacked_latents
+                )
+                    
+
         self.expl_behavior.policy(latent, expl_state)
         task_outs, task_state = self.task_behavior.policy(latent, task_state)
         expl_outs, expl_state = self.expl_behavior.policy(latent, expl_state)
@@ -65,6 +226,11 @@ class Agent(nj.Module):
             outs = task_outs
             outs["log_entropy"] = outs["action"].entropy()
             outs["action"] = outs["action"].sample(seed=nj.rng())
+        else: #Run eval by default
+            outs = task_outs
+            outs["action"] = outs["action"].sample(seed=nj.rng())
+            outs["log_entropy"] = jnp.zeros(outs["action"].shape[:1])
+
         state = ((latent, outs["action"]), task_state, expl_state)
         return outs, state
 
@@ -156,8 +322,769 @@ class WorldModel(nj.Module):
         mets, (state, outs, metrics) = self.opt(modules, self.loss, data, state, has_aux=True)
         metrics.update(mets)
         return state, outs, metrics
+    
+    def randomly_mask_images_per_timestep(self, data, key, mask_value=0.0):
+        """
+        Randomly mask 0 to n-1 images for each timestep, ensuring at least one image remains unmasked.
+        
+        Args:
+            data: Dictionary containing the dataset with image keys
+            key: JAX random key
+            mask_value: Value to use for masked pixels (default: 0.0)
+        
+        Returns:
+            Modified data dictionary with randomly masked images
+        """
+        # Create a copy of the data to avoid modifying the original
+        masked_data = data.copy()
+        
+        # Image keys to process
+                # Image keys to process
+        image_keys = [
+            "birdeye_gt",
+            "birdeye_raw",
+            "birdeye_with_traffic_lights",
+            "birdeye_wpt",
+            "camera",
+            "lidar"
+        ]
+        available_keys = [k for k in image_keys if k in data]
+        # print('Loss on Keys: ',available_keys)
+        if len(available_keys) == 0:
+            return masked_data
+        
+        n_images = len(available_keys)
+        batch_size, seq_len = data[available_keys[0]].shape[0], data[available_keys[0]].shape[1]  # 16, 64
+        
+        # Split keys
+        key1, key2 = random.split(key)
+        
+        # For each (batch, timestep), randomly choose how many images to mask (0 to n-1)
+        num_to_mask = random.randint(key1, shape=(batch_size, seq_len), minval=0, maxval=n_images)
+        
+        # Generate random values for each image at each (batch, timestep)
+        # Shape: [batch_size, seq_len, n_images]
+        random_vals = random.uniform(key2, shape=(batch_size, seq_len, n_images))
+        
+        # Sort the random values to get rankings (0 = smallest, n_images-1 = largest)
+        rankings = jnp.argsort(random_vals, axis=-1)
+        
+        # Create a mask where we mask images with ranking < num_to_mask
+        # This gives us a random selection of num_to_mask images
+        mask_matrix = jnp.zeros((batch_size, seq_len, n_images), dtype=bool)
+        
+        for i in range(n_images):
+            # For each image position, check if its ranking is less than num_to_mask
+            image_rank = jnp.where(rankings == i, 
+                                jnp.arange(n_images)[None, None, :], 
+                                n_images)  # Set to n_images if not this image
+            min_rank = jnp.min(image_rank, axis=-1)  # Get the ranking for image i
+            should_mask = min_rank < num_to_mask
+            mask_matrix = mask_matrix.at[:, :, i].set(should_mask)
+        
+        # Apply masks to each image
+        for i, img_key in enumerate(available_keys):
+            images = data[img_key]
+            
+            # Expand mask to match image dimensions
+            mask = mask_matrix[:, :, i].reshape(batch_size, seq_len, 1, 1, 1)
+            
+            # Apply mask: where mask is True, replace with mask_value
+            masked_images = jnp.where(mask, mask_value, images)
+            
+            # Update the data dictionary
+            masked_data[img_key] = masked_images
+            # print('Masking...')
+        
+        return masked_data
+  
+    def randomly_noise_images_per_timestep(self, data, key, mask_value=0.0):
+        """
+        Randomly mask 0 to n-1 images for each timestep, ensuring at least one image remains unmasked.
+        
+        Args:
+            data: Dictionary containing the dataset with image keys
+            key: JAX random key
+            mask_value: Value to use for masked pixels (default: 0.0)
+        
+        Returns:
+            Modified data dictionary with randomly masked images
+        """
+        # Create a copy of the data to avoid modifying the original
+        masked_data = data.copy()
+        
+        # Image keys to process
+        image_keys = [
+            "birdeye_gt",
+            "birdeye_raw",
+            "birdeye_with_traffic_lights",
+            "birdeye_wpt",
+            "camera",
+            "lidar"
+        ]
+        
+        available_keys = [k for k in image_keys if k in data]
+        
+        if len(available_keys) == 0:
+            return masked_data
+        
+        n_images = len(available_keys)
+        batch_size, seq_len = data[available_keys[0]].shape[0], data[available_keys[0]].shape[1]  # 16, 64
+        
+        # Split keys
+        key1, key2 = random.split(key)
+        
+        # For each (batch, timestep), randomly choose how many images to mask (0 to n-1)
+        num_to_mask = random.randint(key1, shape=(batch_size, seq_len), minval=0, maxval=n_images)
+        
+        # Generate random values for each image at each (batch, timestep)
+        # Shape: [batch_size, seq_len, n_images]
+        random_vals = random.uniform(key2, shape=(batch_size, seq_len, n_images))
+        
+        # Sort the random values to get rankings (0 = smallest, n_images-1 = largest)
+        rankings = jnp.argsort(random_vals, axis=-1)
+        
+        # Create a mask where we mask images with ranking < num_to_mask
+        # This gives us a random selection of num_to_mask images
+        mean = 20.0
+        std = 30.0
+        mask_matrix = mean + std * random.normal(key2, (batch_size, seq_len, n_images))  # mean=0, std=1 #jnp.zeros((batch_size, seq_len, n_images), dtype=bool)
+        
+        for i in range(n_images):
+            # For each image position, check if its ranking is less than num_to_mask
+            image_rank = jnp.where(rankings == i, 
+                                jnp.arange(n_images)[None, None, :], 
+                                n_images)  # Set to n_images if not this image
+            min_rank = jnp.min(image_rank, axis=-1)  # Get the ranking for image i
+            should_mask = min_rank < num_to_mask
+            mask_matrix = mask_matrix.at[:, :, i].set(should_mask)
+        
+        # Apply masks to each image
+        for i, img_key in enumerate(available_keys):
+            images = data[img_key]
+            
+            # Expand mask to match image dimensions
+            mask = mask_matrix[:, :, i].reshape(batch_size, seq_len, 1, 1, 1)
+            
+            # Apply mask: where mask is True, replace with mask_value
+            masked_images = jnp.where(mask, mask_value, images)
+            
+            # Update the data dictionary
+            masked_data[img_key] = masked_images
+            
+        
+        return masked_data
+
+    def randomly_project_images_per_timestep(self, data, key, min_projection_ratio=0.3, max_projection_ratio=0.7):
+        """
+        Randomly project 0 to n-1 images for each timestep using random linear projections,
+        ensuring at least one image remains unprojected.
+        
+        Args:
+            data: Dictionary containing the dataset with image keys
+            key: JAX random key
+            min_projection_ratio: Minimum ratio of original dimensions to project to (default: 0.3)
+            max_projection_ratio: Maximum ratio of original dimensions to project to (default: 0.7)
+        
+        Returns:
+            Modified data dictionary with randomly projected images
+        """
+        # Create a copy of the data to avoid modifying the original
+        projected_data = data.copy()
+        
+        # Image keys to process
+        image_keys = [
+            "birdeye_wpt"
+        ]
+        
+        available_keys = [k for k in image_keys if k in data]
+        
+        if len(available_keys) == 0:
+            return projected_data
+        
+        n_images = len(available_keys)
+        batch_size, seq_len = data[available_keys[0]].shape[0], data[available_keys[0]].shape[1]
+        
+        # Split keys
+        key1, key2, key3, key4 = random.split(key, 4)
+        
+        # For each (batch, timestep), randomly choose how many images to project (0 to n-1)
+        num_to_project = random.randint(key1, shape=(batch_size, seq_len), minval=0, maxval=n_images)
+        
+        # Generate random values for each image at each (batch, timestep)
+        random_vals = random.uniform(key2, shape=(batch_size, seq_len, n_images))
+        
+        # Sort the random values to get rankings
+        rankings = jnp.argsort(random_vals, axis=-1)
+        
+        # Create selection matrix for which images to project
+        selection_matrix = jnp.zeros((batch_size, seq_len, n_images), dtype=bool)
+        
+        for i in range(n_images):
+            # For each image position, check if its ranking is less than num_to_project
+            image_rank = jnp.where(rankings == i, 
+                                jnp.arange(n_images)[None, None, :], 
+                                n_images)
+            min_rank = jnp.min(image_rank, axis=-1)
+            should_project = min_rank < num_to_project
+            selection_matrix = selection_matrix.at[:, :, i].set(should_project)
+        
+        # Apply random projections to selected images
+        projection_keys = random.split(key3, n_images)
+        
+        # Randomly sample projection ratios for each image type
+        projection_ratios = random.uniform(key4, shape=(n_images,), 
+                                        minval=min_projection_ratio, 
+                                        maxval=max_projection_ratio)
+        
+        for i, img_key in enumerate(available_keys):
+            images = data[img_key]  # Shape: [batch_size, seq_len, height, width, channels]
+            original_shape = images.shape
+            height, width, channels = original_shape[2], original_shape[3], original_shape[4]
+            
+            # Calculate projection dimensions using randomly sampled ratio
+            original_dim = height * width * channels
+            projected_dim_float = original_dim * projection_ratios[i]
+            projected_dim = jnp.maximum(1, jnp.round(projected_dim_float)).astype(jnp.int32)
+            
+            # Use a fixed maximum size for the projection matrix, then slice
+            max_projected_dim = int(original_dim * max_projection_ratio) + 1
+            
+            # Create random projection matrix with fixed maximum size
+            proj_matrix_full = random.normal(projection_keys[i], (original_dim, max_projected_dim))
+            
+            # Orthogonalize using QR decomposition for stable projections
+            Q, R = jnp.linalg.qr(proj_matrix_full)
+            
+            # Slice to actual projected dimension - we'll handle this with masking
+            # Create a mask for the columns we want to use
+            col_indices = jnp.arange(max_projected_dim)
+            col_mask = col_indices < projected_dim
+            
+            # Apply column mask to effectively "slice" the matrix
+            proj_matrix = Q * col_mask[None, :]  # Broadcasting the mask
+            
+            # Flatten images for projection
+            flat_images = images.reshape(batch_size, seq_len, -1)
+            
+            # Apply projection and reconstruction using masked matrix
+            projected = jnp.dot(flat_images, proj_matrix)  # Project to lower dim
+            reconstructed = jnp.dot(projected, proj_matrix.T)  # Reconstruct back
+            
+            # Reshape back to original image dimensions
+            reconstructed_images = reconstructed.reshape(original_shape)
+            
+            # Apply selection: use projected version where selected, original otherwise
+            selection_mask = selection_matrix[:, :, i].reshape(batch_size, seq_len, 1, 1, 1)
+            final_images = jnp.where(selection_mask, reconstructed_images, images)
+            
+            # Update the data dictionary
+            projected_data[img_key] = final_images
+        
+        return projected_data
+    
+
+    def randomly_sample_projection(self, data, key, max_projection_ratio):
+        """
+        Apply random projection to images with 64x64 processing.
+        
+        Args:
+            data: Dictionary containing the dataset with image keys
+            key: JAX random key  
+            max_projection_ratio: Single projection ratio (equivalent to diffusion_coef)
+        
+        Returns:
+            Single modified data dictionary with randomly projected images
+        """
+        import jax.numpy as jnp
+        import jax.random as random
+        from jax.scipy.ndimage import map_coordinates
+        
+        # Image keys to process
+        image_keys = [
+            "birdeye_wpt"
+        ]
+        
+        available_keys = [k for k in image_keys if k in data]
+        
+        if len(available_keys) == 0:
+            return data.copy()
+        
+        n_images = len(available_keys)
+        
+        # Get shape information - handle 4D case (batch, h, w, c)
+        sample_image = data[available_keys[0]]
+        if sample_image.ndim == 4:
+            batch_size = sample_image.shape[0]
+            height, width, channels = sample_image.shape[1], sample_image.shape[2], sample_image.shape[3]
+        else:
+            raise ValueError(f"Expected 4D array with shape (batch, h, w, c), got shape: {sample_image.shape}")
+        
+        print(f"Processing images with shape: {sample_image.shape}")
+        print(f"Projection ratio: {max_projection_ratio}")
+        
+        # Split keys for different operations
+        key1, key2 = random.split(key, 2)
+        
+        # For each batch, randomly choose how many images to project (0 to n-1)
+        num_to_project = 1
+        
+        # Generate random values for each image at each batch
+        random_vals = random.uniform(key1, shape=(batch_size, n_images))
+        
+        # Sort the random values to get rankings
+        rankings = jnp.argsort(random_vals, axis=-1)
+        
+        # Create selection matrix for which images to project
+        selection_matrix = jnp.zeros((batch_size, n_images), dtype=bool)
+        
+        for i in range(n_images):
+            # For each image position, check if its ranking is less than num_to_project
+            image_rank = jnp.where(rankings == i, 
+                                jnp.arange(n_images)[None, :], 
+                                n_images)
+            min_rank = jnp.min(image_rank, axis=-1)
+            should_project = min_rank < num_to_project
+            selection_matrix = selection_matrix.at[:, i].set(should_project)
+        
+        # Create the output data dictionary
+        projected_data = {}
+        
+        # Copy non-image data
+        for k, v in data.items():
+            if k not in available_keys:
+                projected_data[k] = v
+        
+        # Apply random projections to selected images
+        projection_keys = random.split(key2, n_images)
+        
+        for i, img_key in enumerate(available_keys):
+            images = data[img_key]
+            
+            # Apply 64x64 random projection
+            reconstructed_images = self._apply_64x64_random_projection(
+                images, projection_keys[i], max_projection_ratio
+            )
+            
+            # Apply selection: use projected version where selected, original otherwise
+            selection_mask = selection_matrix[:, i].reshape(batch_size, 1, 1, 1)
+            final_images = jnp.where(selection_mask, reconstructed_images, images)
+            
+            # Update the data dictionary
+            projected_data[img_key] = final_images
+        
+        return projected_data
+
+
+    def _apply_64x64_random_projection(self, images, projection_key, projection_ratio):
+        """
+        Helper method to apply 64x64 random projection to images
+        
+        Args:
+            images: Input images (batch, h, w, c)
+            projection_key: JAX random key
+            projection_ratio: Ratio of dimensions to keep (0.3 = 30% compression)
+        
+        Returns:
+            Randomly projected images with same shape as input
+        """
+        import jax.numpy as jnp
+        import jax.random as random
+        from jax.scipy.ndimage import map_coordinates
+        
+        batch_size, orig_h, orig_w, channels = images.shape
+        
+        # Calculate dimensions based on 64x64 target
+        original_dim = 64 * 64 * channels
+        projected_dim_float = original_dim * projection_ratio
+        projected_dim = jnp.maximum(1, jnp.round(projected_dim_float)).astype(jnp.int32)
+        
+        # For consistency with your original code, use a max dimension
+        max_projected_dim = int(original_dim * .7) + 1  # Fixed max
+        
+        # Step 1: Resize to 64x64
+        resized_images = self._resize_to_64x64(images)
+        
+        # Step 2: Create random projection matrix
+        proj_matrix = self._create_projection_matrix(
+            projection_key, original_dim, max_projected_dim
+        )
+        
+        # Step 3: Flatten and project
+        flat_images = resized_images.reshape(batch_size, -1)
+        
+        # Create mask for projection dimensions
+        col_mask = jnp.arange(max_projected_dim) < projected_dim
+        masked_proj_matrix = proj_matrix * col_mask[None, :]
+        
+        # Apply projection and reconstruction
+        projected = jnp.dot(flat_images, masked_proj_matrix)
+        reconstructed_flat = jnp.dot(projected, masked_proj_matrix.T)
+        
+        # Step 4: Reshape back to 64x64
+        reconstructed_64x64 = reconstructed_flat.reshape(batch_size, 64, 64, channels)
+        
+        # Step 5: Resize back to original size if needed
+        if (orig_h, orig_w) != (64, 64):
+            final_images = self._resize_from_64x64(reconstructed_64x64, (orig_h, orig_w))
+        else:
+            final_images = reconstructed_64x64
+        
+        return final_images
+
+
+    def _resize_to_64x64(self, images):
+        """Resize images to 64x64"""
+        import jax.numpy as jnp
+        from jax.scipy.ndimage import map_coordinates
+        
+        batch_size, orig_h, orig_w, channels = images.shape
+        
+        if orig_h == 64 and orig_w == 64:
+            return images
+        
+        h_coords = jnp.linspace(0, orig_h - 1, 64)
+        w_coords = jnp.linspace(0, orig_w - 1, 64)
+        h_grid, w_grid = jnp.meshgrid(h_coords, w_coords, indexing='ij')
+        
+        resized_images = []
+        for b in range(batch_size):
+            batch_resized = []
+            for c in range(channels):
+                resized_channel = map_coordinates(
+                    images[b, :, :, c],
+                    [h_grid, w_grid],
+                    order=1,
+                    mode='nearest'
+                )
+                batch_resized.append(resized_channel)
+            resized_images.append(jnp.stack(batch_resized, axis=-1))
+        
+        return jnp.stack(resized_images, axis=0)
+
+
+    def _resize_from_64x64(self, images_64x64, target_size):
+        """Resize from 64x64 back to target size"""
+        import jax.numpy as jnp
+        from jax.scipy.ndimage import map_coordinates
+        
+        batch_size, _, _, channels = images_64x64.shape
+        target_h, target_w = target_size
+        
+        h_coords = jnp.linspace(0, 63, target_h)
+        w_coords = jnp.linspace(0, 63, target_w)
+        h_grid, w_grid = jnp.meshgrid(h_coords, w_coords, indexing='ij')
+        
+        resized_images = []
+        for b in range(batch_size):
+            batch_resized = []
+            for c in range(channels):
+                resized_channel = map_coordinates(
+                    images_64x64[b, :, :, c],
+                    [h_grid, w_grid],
+                    order=1,
+                    mode='nearest'
+                )
+                batch_resized.append(resized_channel)
+            resized_images.append(jnp.stack(batch_resized, axis=-1))
+        
+        return jnp.stack(resized_images, axis=0)
+
+
+    def _create_projection_matrix(self, key, input_dim, max_projected_dim):
+        """Create orthogonal random projection matrix"""
+        import jax.numpy as jnp
+        import jax.random as random
+        
+        # Create random Gaussian matrix
+        random_matrix = random.normal(key, (input_dim, max_projected_dim))
+        
+        # Orthogonalize using QR decomposition
+        Q, R = jnp.linalg.qr(random_matrix)
+        
+        return Q
+    
+    def randomly_dropout_pixels_diffuse(self, data, key, mask_value=0.20):
+        """
+        Randomly dropout pixels with a random ratio between 0% to 100% for each timestep.
+        
+        Args:
+            data: Dictionary containing the dataset with image keys
+            key: JAX random key
+            mask_value: Value to use for masked pixels (default: 0.0)
+        
+        Returns:
+            Modified data dictionary with randomly dropped out pixels
+        """
+        # Create a copy of the data to avoid modifying the original
+        masked_data = data.copy()
+        
+        # Image keys to process
+        image_keys = [
+            "birdeye_wpt"
+        ]
+        available_keys = [k for k in image_keys if k in data]
+        # print('Loss on Keys: ',available_keys)
+        if len(available_keys) == 0:
+            return masked_data
+        
+        batch_size = data[available_keys[0]].shape[0]
+        
+        # Split keys for each image
+        keys = random.split(key, len(available_keys))
+        
+        # Apply pixel dropout to each image
+        for i, img_key in enumerate(available_keys):
+            images = data[img_key]  # Shape: [batch_size, H, W, C]
+            
+            # Get image dimensions
+            H, W, C = images.shape[1], images.shape[2], images.shape[3]
+            
+            # Split key for dropout ratio and pixel selection
+            key_ratio, key_pixels = random.split(keys[i])
+            
+            # Generate random dropout ratios for each (batch, timestep)
+            # Shape: [batch_size, seq_len, 1, 1, 1] for broadcasting
+            dropout_ratios = random.uniform(
+                key_ratio, 
+                shape=(batch_size, 1, 1, 1), 
+                minval=0.0, 
+                maxval=mask_value
+            )
+            
+            # Generate random values for each pixel
+            # Shape: [batch_size, seq_len, H, W, C]
+            pixel_random_vals = random.uniform(
+                key_pixels, 
+                shape=(batch_size, H, W, C)
+            )
+            
+            # Create dropout mask: True where pixel should be dropped
+            # Pixel is dropped if its random value < dropout_ratio
+            dropout_mask = pixel_random_vals < dropout_ratios
+            
+            # Apply dropout: where mask is True, replace with mask_value
+            masked_images = jnp.where(dropout_mask, mask_value, images)
+            
+            # Update the data dictionary
+            masked_data[img_key] = masked_images
+            # print(f'Pixel dropout applied to {img_key}...')
+        
+        return masked_data
+    
+    def randomly_dropout_pixels_per_timestep(self, data, key, mask_value=0.0):
+        """
+        Randomly dropout pixels with a random ratio between 0% to 100% for each timestep.
+        
+        Args:
+            data: Dictionary containing the dataset with image keys
+            key: JAX random key
+            mask_value: Value to use for masked pixels (default: 0.0)
+        
+        Returns:
+            Modified data dictionary with randomly dropped out pixels
+        """
+        # Create a copy of the data to avoid modifying the original
+        masked_data = data.copy()
+        
+        # Image keys to process
+        image_keys = [
+            "birdeye_wpt"
+        ]
+        available_keys = [k for k in image_keys if k in data]
+        # print('Loss on Keys: ',available_keys)
+        if len(available_keys) == 0:
+            return masked_data
+        
+        batch_size, seq_len = data[available_keys[0]].shape[0], data[available_keys[0]].shape[1]  # 16, 64
+        
+        # Split keys for each image
+        keys = random.split(key, len(available_keys))
+        
+        # Apply pixel dropout to each image
+        for i, img_key in enumerate(available_keys):
+            images = data[img_key]  # Shape: [batch_size, seq_len, H, W, C]
+            
+            # Get image dimensions
+            H, W, C = images.shape[2], images.shape[3], images.shape[4]
+            
+            # Split key for dropout ratio and pixel selection
+            key_ratio, key_pixels = random.split(keys[i])
+            
+            # Generate random dropout ratios for each (batch, timestep)
+            # Shape: [batch_size, seq_len, 1, 1, 1] for broadcasting
+            dropout_ratios = random.uniform(
+                key_ratio, 
+                shape=(batch_size, seq_len, 1, 1, 1), 
+                minval=0.0, 
+                maxval=1.0
+            )
+            
+            # Generate random values for each pixel
+            # Shape: [batch_size, seq_len, H, W, C]
+            pixel_random_vals = random.uniform(
+                key_pixels, 
+                shape=(batch_size, seq_len, H, W, C)
+            )
+            
+            # Create dropout mask: True where pixel should be dropped
+            # Pixel is dropped if its random value < dropout_ratio
+            dropout_mask = pixel_random_vals < dropout_ratios
+            
+            # Apply dropout: where mask is True, replace with mask_value
+            masked_images = jnp.where(dropout_mask, mask_value, images)
+            
+            # Update the data dictionary
+            masked_data[img_key] = masked_images
+            # print(f'Pixel dropout applied to {img_key}...')
+        
+        return masked_data
+    
+
+
+    
+    # def randomly_sample_projections(self, data, key, N_samples, min_projection_ratio=0.3, max_projection_ratio=0.7):
+    #     """
+    #     Randomly project 0 to n-1 images for each timestep using random linear projections,
+    #     ensuring at least one image remains unprojected.
+        
+    #     Args:
+    #         data: Dictionary containing the dataset with image keys
+    #         key: JAX random key
+    #         N_samples: Number of different projection ratios to sample
+    #         min_projection_ratio: Minimum ratio of original dimensions to project to (default: 0.3)
+    #         max_projection_ratio: Maximum ratio of original dimensions to project to (default: 0.7)
+        
+    #     Returns:
+    #         List of modified data dictionaries with randomly projected images
+    #     """
+    #     import jax.numpy as jnp
+    #     import jax.random as random
+    #     import numpy as np
+        
+    #     # Image keys to process
+    #     image_keys = [
+    #         "birdeye_wpt"
+    #     ]
+        
+    #     available_keys = [k for k in image_keys if k in data]
+        
+    #     if len(available_keys) == 0:
+    #         return [data.copy()]
+        
+    #     n_images = len(available_keys)
+        
+    #     # Get shape information - handle 4D case (batch, h, w, c)
+    #     sample_image = data[available_keys[0]]
+    #     if sample_image.ndim == 4:
+    #         # Format: (batch, h, w, c) - treat as single timestep
+    #         batch_size, seq_len = sample_image.shape[0], 1
+    #         height, width, channels = sample_image.shape[1], sample_image.shape[2], sample_image.shape[3]
+    #     else:
+    #         raise ValueError(f"Expected 4D array with shape (batch, h, w, c), got shape: {sample_image.shape}")
+        
+    #     print(f"Processing images with shape: {sample_image.shape}")
+        
+    #     # Split keys
+    #     key1, key2, key3 = random.split(key, 3)
+        
+    #     # For each (batch, timestep), randomly choose how many images to project (0 to n-1)
+    #     num_to_project = 1
+        
+    #     # Generate random values for each image at each (batch, timestep)
+    #     random_vals = random.uniform(key2, shape=(batch_size, n_images))
+        
+    #     # Sort the random values to get rankings
+    #     rankings = jnp.argsort(random_vals, axis=-1)
+        
+    #     projections = []
+        
+    #     for diffusion_coef in np.linspace(min_projection_ratio, max_projection_ratio, N_samples):
+    #         projected_data = {}
+            
+    #         # Copy non-image data
+    #         for k, v in data.items():
+    #             if k not in available_keys:
+    #                 projected_data[k] = v
+            
+    #         # Create selection matrix for which images to project
+    #         selection_matrix = jnp.zeros((batch_size, n_images), dtype=bool)
+            
+    #         for i in range(n_images):
+    #             # For each image position, check if its ranking is less than num_to_project
+    #             image_rank = jnp.where(rankings == i, 
+    #                                 jnp.arange(n_images)[None, :], 
+    #                                 n_images)
+    #             min_rank = jnp.min(image_rank, axis=-1)
+    #             should_project = min_rank < num_to_project
+    #             selection_matrix = selection_matrix.at[:, i].set(should_project)
+            
+    #         # Apply random projections to selected images
+    #         projection_keys = random.split(key3, n_images)
+            
+    #         for i, img_key in enumerate(available_keys):
+    #             images = data[img_key]
+    #             original_shape = images.shape
+                
+    #             # Handle 4D input shape - reshape to (batch, seq, h, w, c) for consistent processing
+    #             if images.ndim == 4:
+    #                 # Reshape (batch, h, w, c) to (batch, 1, h, w, c)
+    #                 images = images[:, None, ...]
+    #                 process_shape = images.shape
+    #             else:
+    #                 process_shape = original_shape
+                
+    #             # Calculate projection dimensions using randomly sampled ratio
+    #             original_dim = height * width * channels
+    #             projected_dim_float = original_dim * diffusion_coef
+    #             projected_dim = jnp.maximum(1, jnp.round(projected_dim_float)).astype(jnp.int32)
+                
+    #             # Use a fixed maximum size for the projection matrix, then slice
+    #             max_projected_dim = int(original_dim * max_projection_ratio) + 1
+                
+    #             # Create random projection matrix with fixed maximum size
+    #             proj_matrix_full = random.normal(projection_keys[i], (original_dim, max_projected_dim))
+                
+    #             # Orthogonalize using QR decomposition for stable projections
+    #             Q, R = jnp.linalg.qr(proj_matrix_full)
+                
+    #             # Create a mask for the columns we want to use
+    #             col_indices = jnp.arange(max_projected_dim)
+    #             col_mask = col_indices < projected_dim
+                
+    #             # Apply column mask to effectively "slice" the matrix
+    #             proj_matrix = Q * col_mask[None, :]
+                
+    #             # Flatten images for projection
+    #             flat_images = images.reshape(batch_size, seq_len, -1)
+                
+    #             # Apply projection and reconstruction using masked matrix
+    #             projected = jnp.dot(flat_images, proj_matrix)  # Project to lower dim
+    #             reconstructed = jnp.dot(projected, proj_matrix.T)  # Reconstruct back
+                
+    #             # Reshape back to processing dimensions
+    #             reconstructed_images = reconstructed.reshape(process_shape)
+                
+    #             # Apply selection: use projected version where selected, original otherwise
+    #             # For multiple batch/timesteps, use broadcasting
+    #             selection_mask = selection_matrix[:, i].reshape(batch_size, 1, 1, 1, 1)
+    #             final_images = jnp.where(selection_mask, reconstructed_images, images)
+                
+    #             # Reshape back to original shape if needed
+    #             if original_shape != final_images.shape:
+    #                 final_images = final_images.reshape(original_shape)
+                
+    #             # Update the data dictionary
+    #             projected_data[img_key] = final_images
+            
+    #         projections.append(projected_data)
+        
+    #     return projections
 
     def loss(self, data, state):
+        key = random.PRNGKey(42)
+        # data = self.randomly_mask_images_per_timestep(data, key, mask_value=0.0)
+        # data = self.randomly_dropout_pixels_per_timestep(data, key)
         embed = self.encoder(data)
         prev_latent, prev_action = state
         prev_actions = jnp.concatenate([prev_action[:, None], data["action"][:, :-1]], 1)

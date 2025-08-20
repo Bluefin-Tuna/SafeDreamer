@@ -27,6 +27,13 @@ declare -A BASE_CHECKPOINTS_DEFAULT=(
 )
 
 # Base checkpoints for default
+declare -A BASE_CHECKPOINTS_DEFAULT_BEV=(
+  ["carla_four_lane"]="./logdir/carla_four_lane_bev/checkpoint.ckpt"
+  ["carla_right_turn_simple"]="./logdir/carla_right_turn_bev/checkpoint.ckpt"
+  ["carla_stop_sign"]="./logdir/carla_stop_sign_bev/checkpoint.ckpt"
+)
+
+# Base checkpoints for default
 declare -A BASE_CHECKPOINTS_PROJECT=(
   ["carla_four_lane"]="./logdir/carla_four_lane_bev_proj/checkpoint.ckpt"
   ["carla_right_turn_simple"]="./logdir/carla_right_turn_bev_proj/checkpoint.ckpt"
@@ -40,9 +47,16 @@ declare -A BASE_CHECKPOINTS_PIXEL=(
   ["carla_stop_sign"]="./logdir/carla_stop_sign_bev_pixel/checkpoint.ckpt"
 )
 
+# Base checkpoints for default
+declare -A BASE_CHECKPOINTS_RECON=(
+  ["carla_four_lane"]="./logdir/carla_four_lane_bev_recon/checkpoint.ckpt"
+  ["carla_right_turn_simple"]="./logdir/carla_right_turn_bev_recon/checkpoint.ckpt"
+  ["carla_stop_sign"]="./logdir/carla_stop_sign_bev_recon/checkpoint.ckpt"
+)
+
 # Scenarios
 SCENARIOS=("carla_stop_sign") #"carla_right_turn_simple" "carla_stop_sign")
-AUG_TYPES=("gaulite")
+AUG_TYPES=("glare")
 AUG_LEVELS=(1)
 
 run_eval() {
@@ -67,11 +81,29 @@ run_eval() {
 #   done
 # done
 
-echo "=== Running Single Projection Augmentations ==="
+# echo "=== Running Single Projection Augmentations ==="
+# for scenario in "${SCENARIOS[@]}"; do
+#   for aug in "${AUG_TYPES[@]}"; do
+#     for level in "${AUG_LEVELS[@]}"; do
+#       run_eval "${BASE_CHECKPOINTS_PIXEL[$scenario]}" "sample_${aug}_1" "$scenario"
+#     done
+#   done
+# done
+
+# echo "=== Running Default Augmentations ==="
+# for scenario in "${SCENARIOS[@]}"; do
+#   for aug in "${AUG_TYPES[@]}"; do
+#     for level in "${AUG_LEVELS[@]}"; do
+#       run_eval "${BASE_CHECKPOINTS_DEFAULT_BEV[$scenario]}" "${aug}_${level}" "$scenario"
+#     done
+#   done
+# done
+
+echo "=== Running Pixel Augmentations ==="
 for scenario in "${SCENARIOS[@]}"; do
   for aug in "${AUG_TYPES[@]}"; do
     for level in "${AUG_LEVELS[@]}"; do
-      run_eval "${BASE_CHECKPOINTS_PIXEL[$scenario]}" "sample_${aug}_1" "$scenario"
+      run_eval "${BASE_CHECKPOINTS_PIXEL[$scenario]}" "sample_${aug}_${level}" "$scenario"
     done
   done
 done

@@ -232,7 +232,7 @@ class CarlaBaseEnv(gym.Env):
             self.obs[key] = np.clip(self.obs[key] + noise, 0, 255)
 
         def apply_gaussianlite(key):
-            noise = np.random.normal(4, 6, self.obs[key].shape).astype(np.uint8)
+            noise = np.random.normal(20, 30, self.obs[key].shape).astype(np.uint8)
             self.obs[key] = np.clip(self.obs[key] + noise, 0, 255)
 
         def apply_occlusion(key):

@@ -171,30 +171,117 @@ class Agent(nj.Module):
                 embed = self.wm.encoder(obs_masked)
                 latent, temp_prior_orig = self.wm.rssm.obs_step(
                     prev_latent, prev_action, embed, obs['is_first'])
-            elif 'sample' in mode: #Expects that we are using one representation.
+
+            elif 'sample' in mode:
+                # Smart gradient-based dropout instead of brute force search
+                
+                # First, get baseline surprise with original observation
                 base_surprise = self.wm.rssm.get_dist(latent).kl_divergence(self.wm.rssm.get_dist(prior_orig))
+                
+                # Smart dropout function integrated into your existing structure
+                def compute_surprise_for_obs(obs_input):
+                    """Compute surprise for given observation - used for gradient computation"""
+                    embed = self.wm.encoder(obs_input)
+                    temp_latent, temp_prior = self.wm.rssm.obs_step(
+                        prev_latent, prev_action, embed, obs_input['is_first']
+                    )
+                    surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(
+                        self.wm.rssm.get_dist(temp_prior)
+                    )
+                    return surprise.mean()  # Return scalar for gradient computation
+                
+                # Compute gradients to find harmful pixels
+                surprise_grad_fn = jax.grad(compute_surprise_for_obs)
+                
+                # Get image key
+                image_key = self.wm.config.encoder.cnn_keys#[0]
+                
+                # Try different dropout ratios, but use smart selection
+                # target_dropout_ratios = np.linspace(0.65, 1, 50)  # Fewer samples, smarter selection
+                n_samples = 70
+                target_dropout_ratios = np.linspace(0.01, 1, n_samples)
+                
                 total_newlat_seperate = []
                 surprises = []
-                image_key = self.wm.config.encoder.cnn_keys
-                n_samples = 10
                 key = random.PRNGKey(42)
-                for diffusion_coef in np.linspace(0.0, 1, n_samples, endpoint=True):
-                    sampled_obs = jax.tree_map(lambda x: x, obs)
-                    sampled_obs = self.wm.randomly_dropout_pixels_diffuse(sampled_obs, key, mask_value=diffusion_coef)
+                done = False  # Python bool at start
+                surprise_threshold = 3.0  # Example threshold, tune based on your domain
+                gradient_magnitude_delta = 10.0
+                old_gradient_magnitude = jnp.array(0.0)
+
+                for target_ratio in target_dropout_ratios:
+                    try:
+                        # print('Trying: ',target_ratio)
+                        # Compute pixel gradients
+                        pixel_gradients = surprise_grad_fn(obs)
+                        
+                        # Get importance scores for the image
+                        pixel_importance = jnp.abs(pixel_gradients[image_key])
+                        batch_size, H, W, C = obs[image_key].shape
+                        
+                        # Flatten importance scores
+                        flat_importance = pixel_importance.reshape(batch_size, -1)
+                        
+                        # Number of pixels to drop based on target ratio
+                        n_drop = int(target_ratio * H * W * C)
+                        
+                        if n_drop > 0:
+                            # Get indices of most harmful pixels (highest gradient magnitude)
+                            harmful_indices = jnp.argpartition(flat_importance, -n_drop, axis=1)[:, -n_drop:]
+                            
+                            # Create dropout mask
+                            dropout_mask = jnp.zeros_like(flat_importance, dtype=bool)
+                            batch_indices = jnp.arange(batch_size)[:, None]
+                            dropout_mask = dropout_mask.at[batch_indices, harmful_indices].set(True)
+                            dropout_mask = dropout_mask.reshape(batch_size, H, W, C)
+                            
+                            # Apply smart dropout
+                            sampled_obs = jax.tree_map(lambda x: x, obs)
+                            sampled_obs[image_key] = jnp.where(dropout_mask, 0.0, obs[image_key])  # Set to 0 instead of mask_value
+                        else:
+                            # No dropout for very small ratios
+                            sampled_obs = jax.tree_map(lambda x: x, obs)
+                        
+                    except Exception as e:
+                        # Fallback to random dropout if gradient computation fails
+                        print(f"Gradient computation failed, using random dropout: {e}")
+                        sampled_obs = jax.tree_map(lambda x: x, obs)
+                        sampled_obs = self.wm.randomly_dropout_pixels_diffuse(sampled_obs, key, mask_value=target_ratio)
+                    
+                    # Compute latent and surprise for this dropout configuration
                     embed = self.wm.encoder(sampled_obs)
-
                     temp_latent, temp_prior_orig = self.wm.rssm.obs_step(
-                    prev_latent, prev_action, embed, obs['is_first'])
-
+                        prev_latent, prev_action, embed, obs['is_first']
+                    )
                     surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(
-                        self.wm.rssm.get_dist(temp_prior_orig))
-                
+                        self.wm.rssm.get_dist(temp_prior_orig)
+                    )
+                    # Masking trick: only keep if not "done" yet
+                    keep = jnp.logical_not(done)
+
+                    # surprises.append(jnp.where(keep, surprise, jnp.inf))
+                    # total_newlat_seperate.append(
+                    #     jax.tree_map(lambda x: jnp.where(keep, x, jnp.nan), temp_latent)
+                    # )
+                    
+                    # Update done flag (once True, stays True)
+                    # done = jnp.logical_or(done, surprise < surprise_threshold)
+                    gradient_magnitude = jnp.mean(jnp.abs(pixel_gradients[image_key]))
+                    done = jnp.logical_or(done, gradient_magnitude-old_gradient_magnitude < gradient_magnitude_delta)
+                    old_gradient_magnitude = gradient_magnitude
+                    
+                    
+                    
+                    
                     surprises.append(surprise)
                     total_newlat_seperate.append(temp_latent)
-
+                # Assuming `keep` is a boolean array or pytree matching temp_latent
+                n_levels = jnp.sum(keep)  # counts all True
+                # Add original observation (no dropout) as final candidate
                 total_newlat_seperate.append(latent)
                 surprises.append(base_surprise)
-
+                
+                # Select best configuration
                 surprises = jnp.array(surprises)
                 min_idx = jnp.argmin(surprises)
                 
@@ -203,12 +290,38 @@ class Agent(nj.Module):
                     lambda *candidates: jnp.stack(candidates, axis=0),
                     *total_newlat_seperate
                 )
-            
+
                 # Select the latent with lowest surprise
-                latent = jax.tree_map(
+                best_latent = jax.tree_map(
                     lambda stacked: stacked[min_idx],
                     stacked_latents
                 )
+                
+                # Check if minimum surprise is still too high
+                min_surprise = surprises[min_idx]
+                
+                # Ensure min_surprise is a scalar
+                min_surprise_scalar = jnp.squeeze(min_surprise)  # Remove dimensions of size 1
+                # or alternatively:
+                # min_surprise_scalar = min_surprise.item()  # Convert to Python scalar
+
+                # # Use prior_orig if surprise exceeds threshold, otherwise use best latent
+                latent = jax.lax.cond(
+                    min_surprise_scalar > surprise_threshold,
+                    lambda: prior_orig,  # If surprise too high, use prior
+                    lambda: best_latent  # Otherwise use best dropout result
+                )
+                # predicate = jnp.logical_or(
+                #     min_surprise_scalar > surprise_threshold,
+                #     n_levels > jnp.squeeze(n_samples*.9)
+                # )
+
+                # latent = jax.lax.cond(
+                #     predicate,
+                #     lambda _: prior_orig,
+                #     lambda _: best_latent,
+                #     operand=None  # pass None because lambdas expect one argument
+                # )
                     
 
         self.expl_behavior.policy(latent, expl_state)
@@ -845,11 +958,15 @@ class WorldModel(nj.Module):
             
             # Generate random dropout ratios for each (batch, timestep)
             # Shape: [batch_size, seq_len, 1, 1, 1] for broadcasting
-            dropout_ratios = random.uniform(
-                key_ratio, 
+            # dropout_ratios = random.uniform(
+            #     key_ratio, 
+            #     shape=(batch_size, 1, 1, 1), 
+            #     minval=0.0, 
+            #     maxval=mask_value
+            # )
+            dropout_ratios = jnp.full(
                 shape=(batch_size, 1, 1, 1), 
-                minval=0.0, 
-                maxval=mask_value
+                fill_value=mask_value
             )
             
             # Generate random values for each pixel
@@ -1084,8 +1201,8 @@ class WorldModel(nj.Module):
     def loss(self, data, state):
         key = random.PRNGKey(42)
         # data = self.randomly_mask_images_per_timestep(data, key, mask_value=0.0)
-        # data = self.randomly_dropout_pixels_per_timestep(data, key)
-        embed = self.encoder(data)
+        enc_data = self.randomly_dropout_pixels_per_timestep(data, key)
+        embed = self.encoder(enc_data)
         prev_latent, prev_action = state
         prev_actions = jnp.concatenate([prev_action[:, None], data["action"][:, :-1]], 1)
         post, prior = self.rssm.observe(embed, prev_actions, data["is_first"], prev_latent)

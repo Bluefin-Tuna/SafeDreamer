@@ -192,6 +192,7 @@ class Agent(nj.Module):
                 
                 # Compute gradients to find harmful pixels
                 surprise_grad_fn = jax.grad(compute_surprise_for_obs)
+                #Check
                 
                 # Get image key
                 image_key = self.wm.config.encoder.cnn_keys#[0]

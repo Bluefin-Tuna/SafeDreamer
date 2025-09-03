@@ -5,13 +5,6 @@ set -e
 PORT=2000
 GPU=0
 
-# Base checkpoints for augment_high
-declare -A BASE_CHECKPOINTS_AUGMENT_HIGH=(
-  ["carla_four_lane"]="./logdir/carla_four_lane_sensor_6_augment_high/checkpoint.ckpt"
-  ["carla_right_turn_simple"]="./logdir/carla_right_turn_simple_sensor_6_augment_high/checkpoint.ckpt"
-  ["carla_stop_sign"]="./logdir/carla_stop_sign_sensor_6_augment_high/checkpoint.ckpt"
-)
-
 # Base checkpoints for dropout
 declare -A BASE_CHECKPOINTS_DROPOUT=(
   ["carla_four_lane"]="./logdir/carla_four_lane_sensor_6_dropout/checkpoint.ckpt"
@@ -56,8 +49,8 @@ declare -A BASE_CHECKPOINTS_RECON=(
 
 # Scenarios
 SCENARIOS=("carla_stop_sign") #"carla_right_turn_simple" "carla_stop_sign")
-AUG_TYPES=("glare")
-AUG_LEVELS=(1)
+AUG_TYPES=("gaussian")
+AUG_LEVELS=(0.5)
 
 run_eval() {
   local checkpoint="$1"
@@ -90,20 +83,20 @@ run_eval() {
 #   done
 # done
 
-# echo "=== Running Default Augmentations ==="
-# for scenario in "${SCENARIOS[@]}"; do
-#   for aug in "${AUG_TYPES[@]}"; do
-#     for level in "${AUG_LEVELS[@]}"; do
-#       run_eval "${BASE_CHECKPOINTS_DEFAULT_BEV[$scenario]}" "${aug}_${level}" "$scenario"
-#     done
-#   done
-# done
-
-echo "=== Running Pixel Augmentations ==="
+echo "=== Running Default Augmentations ==="
 for scenario in "${SCENARIOS[@]}"; do
   for aug in "${AUG_TYPES[@]}"; do
     for level in "${AUG_LEVELS[@]}"; do
-      run_eval "${BASE_CHECKPOINTS_PIXEL[$scenario]}" "sample_${aug}_${level}" "$scenario"
+      run_eval "${BASE_CHECKPOINTS_DEFAULT_BEV[$scenario]}" "${aug}_timestep10_${level}" "$scenario"
     done
   done
 done
+
+# echo "=== Running Pixel Augmentations ==="
+# for scenario in "${SCENARIOS[@]}"; do
+#   for aug in "${AUG_TYPES[@]}"; do
+#     for level in "${AUG_LEVELS[@]}"; do
+#       run_eval "${BASE_CHECKPOINTS_PIXEL[$scenario]}" "sample_${aug}_${level}" "$scenario"
+#     done
+#   done
+# done

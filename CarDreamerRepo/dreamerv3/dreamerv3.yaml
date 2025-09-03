@@ -37,9 +37,9 @@ defaults:
     eval_fill: 0
     log_zeros: False
     log_keys_video: [none]
-    log_keys_sum: "^$"
-    log_keys_mean: "(log_entropy)"
-    log_keys_max: "^$"
+    log_keys_sum: "log_surprise.*" #"^$"
+    log_keys_mean: "(log_entropy|log_surprise.*)"
+    log_keys_max: "log_surprise.*"
     from_checkpoint: ""
     sync_every: 10
     mode: ''

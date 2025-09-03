@@ -7,7 +7,7 @@ import numpy as np
 from gym import spaces
 import random
 from .toolkit import EnvMonitorOpenCV, Observer, WorldManager
-
+import re
 
 class CarlaBaseEnv(gym.Env):
     def __init__(self, config):
@@ -196,57 +196,85 @@ class CarlaBaseEnv(gym.Env):
     def _simulate_failure(self):
         np.random.seed(0)
 
-        number_of_failures = int(self._config.mode.split('_')[-1])
-        # available_keys = [
-        #     "birdeye_gt",
-        #     "birdeye_raw",
-        #     "birdeye_with_traffic_lights",
-        #     "birdeye_wpt",
-        #     "camera",
-        #     "lidar"
-        # ]
+        val_str = self._config.mode.split('_')[-1]
+        try:
+            number_of_failures = int(val_str)
+        except ValueError:
+            number_of_failures = float(val_str)
+
         
         available_keys = [
             "birdeye_wpt"
         ]
+        # Check the type afterward
+        if isinstance(number_of_failures, int):
+            if number_of_failures > 1:
+                available_keys = [
+                    "birdeye_gt",
+                    "birdeye_raw",
+                    "birdeye_with_traffic_lights",
+                    "birdeye_wpt",
+                    "camera",
+                    "lidar"
+                ]
+            else:
+                available_keys = [
+                    "birdeye_wpt"
+                ]
+            nov_keys = random.sample(available_keys, number_of_failures)
+            noise_intensity = 1
+        elif isinstance(number_of_failures, float): #Corrupt by a percentage
+            nov_keys = ["birdeye_wpt"]
+            noise_intensity = number_of_failures
 
-        # Always sample a list of keys
-        nov_keys = random.sample(available_keys, number_of_failures)
+        
+        match = re.search(r'(?:^|_)timestep(\d+)(?:_|$)', self._config.mode)
+        # print(match)
+        if match:
+            noise_timestep = int(match.group(1))
+            # print(f"Found timestep number: {noise_timestep}")
+        else:
+            noise_timestep = -1 #Do all the time
 
         # Helper: apply transformation to a single key
-        def apply_jitter(key):
+        def apply_jitter(key, noise_intensity):
+            mu = 20 * noise_intensity
+            std = 20 * noise_intensity
             img = self.obs[key].astype(np.float32)
-            brightness = np.random.uniform(20, 30)
-            contrast = np.random.uniform(20, 30)
+            brightness = np.random.uniform(mu,std)
+            contrast = np.random.uniform(mu,std)
             img = np.clip(img * contrast + brightness * 10, 0, 255).astype(np.uint8)
             self.obs[key] = img
 
-        def apply_glare(key):
+        def apply_glare(key, noise_intensity):
+            mu = 20 * noise_intensity
+            std = 20 * noise_intensity
             img = self.obs[key].astype(np.float32)
-            brightness = np.random.uniform(20, 30)
+            brightness = np.random.uniform(mu, std)
             img = np.clip(img * 0 + brightness * 10, 0, 255).astype(np.uint8)
             self.obs[key] = img
 
-        def apply_gaussian(key):
-            noise = np.random.normal(20, 30, self.obs[key].shape).astype(np.uint8)
+        def apply_gaussian(key, noise_intensity):
+            mu = 20 * noise_intensity
+            std = 20 * noise_intensity
+            noise = np.random.normal(mu, std, self.obs[key].shape).astype(np.uint8)
             self.obs[key] = np.clip(self.obs[key] + noise, 0, 255)
 
-        def apply_gaussianlite(key):
-            noise = np.random.normal(20, 30, self.obs[key].shape).astype(np.uint8)
-            self.obs[key] = np.clip(self.obs[key] + noise, 0, 255)
 
-        def apply_occlusion(key):
+        def apply_occlusion(key, noise_intensity):
+            mu = 35 * noise_intensity
+            std = 40 * noise_intensity
             img = self.obs[key].copy()
             h, w, _ = img.shape
             x, y = np.random.randint(0, w//2), np.random.randint(0, h//2)
-            mask_w, mask_h = np.random.randint(35, 40), np.random.randint(35, 40)
+            mask_w, mask_h = np.random.randint(mu, std), np.random.randint(mu, std)
             img[y:y+mask_h, x:x+mask_w] = 0
             self.obs[key] = img
 
-        def apply_channelswap(key):
+        def apply_channelswap(key, noise_intensity):
             self.obs[key] = self.obs[key][..., np.random.permutation(3)]
         
-        def apply_lag_sensor(key):
+        def apply_lag_sensor(key, noise_intensity):
             """Simulate multi-frame lag by using an older observation."""
             if key in self._lag_buffer and len(self._lag_buffer[key]) > 1:
                 max_lag = min(75, len(self._lag_buffer[key]) - 1)  # up to 5 steps back
@@ -256,17 +284,17 @@ class CarlaBaseEnv(gym.Env):
 
         # Loop over keys and modes
         for key in nov_keys:
-            if 'jitter' in self._config.mode:
-                apply_jitter(key)
-            if 'glare' in self._config.mode:
-                apply_glare(key)
-            if 'gaussian' in self._config.mode:
-                apply_gaussian(key)
-            if 'occlusion' in self._config.mode:
-                apply_occlusion(key)
-            if 'channelswap' in self._config.mode:
-                apply_channelswap(key)
-            if 'lag' in self._config.mode:
-                apply_lag_sensor(key)
-            if 'gaulite' in self._config.mode:
-                apply_gaussianlite(key)
+            if noise_timestep == -1 or self._world._time_step==noise_timestep: 
+                print(noise_timestep)
+                if 'jitter' in self._config.mode:
+                    apply_jitter(key, noise_intensity)
+                if 'glare' in self._config.mode:
+                    apply_glare(key, noise_intensity)
+                if 'gaussian' in self._config.mode:
+                    apply_gaussian(key, noise_intensity)
+                if 'occlusion' in self._config.mode:
+                    apply_occlusion(key, noise_intensity)
+                if 'channelswap' in self._config.mode:
+                    apply_channelswap(key, noise_intensity)
+                if 'lag' in self._config.mode:
+                    apply_lag_sensor(key, noise_intensity)

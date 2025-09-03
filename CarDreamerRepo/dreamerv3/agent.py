@@ -47,6 +47,7 @@ class Agent(nj.Module):
         return self.wm.initial(batch_size)
 
     def policy(self, obs, state, mode="train"):
+
         self.config.jax.jit and print("Tracing policy function.")
         obs = self.preprocess(obs)
         (prev_latent, prev_action), task_state, expl_state = state
@@ -329,9 +330,27 @@ class Agent(nj.Module):
         task_outs, task_state = self.task_behavior.policy(latent, task_state)
         expl_outs, expl_state = self.expl_behavior.policy(latent, expl_state)
         if mode == "eval":
+            def reshape_log_surprises(surprises_dict):
+                reshaped = {}
+                for k, v in surprises_dict.items():
+                    if k.startswith('log_surprise'):
+                        # reshape scalar [] or any shape to [1]
+                        reshaped[k] = jnp.reshape(v, (1,))
+                    else:
+                        reshaped[k] = v
+                return reshaped
             outs = task_outs
             outs["action"] = outs["action"].sample(seed=nj.rng())
             outs["log_entropy"] = jnp.zeros(outs["action"].shape[:1])
+            surprise = lambda post, prior: self.wm.rssm.get_dist(post).kl_divergence(
+                self.wm.rssm.get_dist(prior)
+            )
+            # metrics = {}
+            outs.update(jaxutils.tensorstats(surprise(latent, prior_orig), "log_surprise"))
+            # print(outs)
+            outs = reshape_log_surprises(outs)
+            print({k: v.shape for k, v in outs.items()})
+
         elif mode == "explore":
             outs = expl_outs
             outs["log_entropy"] = outs["action"].entropy()

@@ -92,6 +92,9 @@ def eval_only(agent, env, logger, args):
                 stats[f"policy_{key}"] = ep[key]
 
         def log(key, value):
+            if key == 'log_surprise_mean':
+                # stats[]
+                print()
             if re.match(args.log_keys_sum, key):
                 stats[f"sum_{key}"] = value.sum()
             if re.match(args.log_keys_mean, key):

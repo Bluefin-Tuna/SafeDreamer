@@ -93,8 +93,7 @@ def eval_only(agent, env, logger, args):
 
         def log(key, value):
             if key == 'log_surprise_mean':
-                # stats[]
-                print()
+                stats['log_surprise_mean'] = value[10] # The noise will always be the highest.
             if re.match(args.log_keys_sum, key):
                 stats[f"sum_{key}"] = value.sum()
             if re.match(args.log_keys_mean, key):
@@ -185,7 +184,7 @@ def main(argv=None):
             "run.log_keys_sum": "(travel_distance|destination_reached|out_of_lane|time_exceeded|is_collision|timesteps)",
             "run.log_keys_mean": "(travel_distance|ttc|speed_norm|wpt_dis)",
             "run.log_keys_max": "(travel_distance|ttc|speed_norm|wpt_dis)",
-            "run.steps": 15000,
+            "run.steps": 3000,#15000,
         }
     )
 

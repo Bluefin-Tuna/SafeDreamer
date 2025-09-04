@@ -25,7 +25,7 @@ defaults:
 
   run:
     script: train
-    steps: 2e5 #1e4 #1e10
+    steps: 1e4 #2e5 #1e4 #1e10
     expl_until: 0
     log_every: 300
     save_every: 900
@@ -165,7 +165,7 @@ osrp:
   planner: {horizon: 15, num_samples: 500, num_elites: 50, mixture_coef: 0.00, init_std: 1.0}
   run:
     script: train_eval
-    steps: 2e5 #1e6
+    steps: 2e4 #2e5 #1e6
     eval_every: 1e4
     eval_initial: False
     eval_eps: 1

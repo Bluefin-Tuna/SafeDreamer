@@ -119,7 +119,11 @@ def eval_only(agent, env, logger, args, lag):
     score = float(ep['reward'].astype(np.float64).sum())
     logger.add({'length': length, 'score': score}, prefix='episode')
     print(f'Episode has {length} steps and return {score:.1f}.')
-
+    if 'log_surprise_mean' in ep.keys():
+      # print(ep['log_surprise_mean'])
+      surprise = float(ep['log_surprise_mean'][10].astype(np.float64).sum()) # The noise will always be the highest. Only works if noise is started at 50.
+      logger.add({'log_surprise_mean': surprise}, prefix='episode')  
+      print(f'Episode has {length} steps and surprise {surprise:.2f}.')
     if 'cost' in ep.keys():
       cost = float(ep['cost'].astype(np.float64).sum())
       logger.add({'cost': cost}, prefix='episode')
@@ -132,6 +136,7 @@ def eval_only(agent, env, logger, args, lag):
       if not args.log_zeros and key not in nonzeros and (value == 0).all():
         continue
       nonzeros.add(key)
+     
       if re.match(args.log_keys_sum, key):
         stats[f'sum_{key}'] = ep[key].sum()
       if re.match(args.log_keys_mean, key):

@@ -388,10 +388,16 @@ def main(config):
     ).to(config.device)
     agent.requires_grad_(requires_grad=False)
     if (logdir / "latest.pt").exists():
-        checkpoint = torch.load(logdir / "latest.pt")
-        agent.load_state_dict(checkpoint["agent_state_dict"])
-        tools.recursively_load_optim_state_dict(agent, checkpoint["optims_state_dict"])
-        agent._should_pretrain._once = False
+        # print('Loading Model')
+        # checkpoint = torch.load(logdir / "latest.pt")
+        # # agent.load_state_dict(checkpoint["agent_state_dict"])
+        # agent.load_state_dict(checkpoint)
+        # tools.recursively_load_optim_state_dict(agent, checkpoint["optims_state_dict"])
+        # agent._should_pretrain._once = False
+        checkpoint_path = logdir / "latest.pt"
+        print("Loading model from", checkpoint_path)
+        checkpoint = torch.load(checkpoint_path)  # this is probably just a state_dict
+        agent.load_state_dict(checkpoint)         # load it directly
 
     # make sure eval will be executed once after config.steps
     while agent._step < config.steps + config.eval_every:

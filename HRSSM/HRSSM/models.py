@@ -649,6 +649,7 @@ class ImagBehavior(nn.Module):
         dynamics = self._world_model.dynamics
         if repeats:
             raise NotImplemented("repeats is not implemented in this version")
+        
         flatten = lambda x: x.reshape([-1] + list(x.shape[2:]))
         start = {k: flatten(v) for k, v in start.items()}
 

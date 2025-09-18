@@ -11,7 +11,7 @@ defaults:
   steps: 1e6
   parallel: False
   eval_every: 1e4
-  eval_episode_num: 5 #10
+  eval_episode_num: 1 #10
   log_every: 1e4
   reset_every: 0
   device: 'cuda:0'
@@ -23,7 +23,7 @@ defaults:
 
   # Environment
   task: 'dmc_walker_walk'
-  size: [64, 64]
+  size: [64, 64, 3]
   envs: 1
   action_repeat: 2
   time_limit: 500
@@ -111,7 +111,7 @@ defaults:
   future_entropy: False
 
   # Exploration
-  expl_behavior: 'greedy'
+  expl_behavior: 'greedy' #
   expl_until: 0
   expl_extr_scale: 0.0
   expl_intr_scale: 1.0
@@ -123,6 +123,7 @@ defaults:
   disag_units: 400
   disag_action_cond: False
   env:
+    safetygym: {size: [64,64], repeat: 5, render: True, obs_key: 'image', camera_name: 'vision_front_back'}
     world:
       carla_port: 2000
 
@@ -295,6 +296,8 @@ debug:
   prefill: 1
   batch_size: 10
   batch_length: 20
+  encoder: {mlp_keys: '$^', cnn_keys: 'image', cnn_depth: 96, mlp_layers: 5, mlp_units: 1024}
+  decoder: {mlp_keys: '$^', cnn_keys: 'image', cnn_depth: 96, mlp_layers: 5, mlp_units: 1024}
 
 mydebug:
   debug: True
@@ -314,6 +317,20 @@ continuous:
 
 plot_env:
   size: [400, 400]
+safetygym:
+  mode: 'glare_all'
+  size: [64, 64, 3]
+  batch_size: 24
+  train_ratio: 512
+  dyn_hidden: 1024
+  dyn_deter: 4096
+  units: 1024
+  reward_layers: 5
+  cont_layers: 5
+  value_layers: 5
+  actor_layers: 5
+  encoder: {mlp_keys: '$^', cnn_keys: 'image', cnn_depth: 32, mlp_layers: 5, mlp_units: 1024}
+  decoder: {mlp_keys: '$^', cnn_keys: 'image', cnn_depth: 32, mlp_layers: 5, mlp_units: 1024}
 
 carla:
   # prefill: 1000

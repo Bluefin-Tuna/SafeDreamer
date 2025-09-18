@@ -80,6 +80,7 @@ class SimpleLogger:
     #     self._videos[name] = np.array(value)
 
     def write(self, fps=False, step=False):
+        print('Writing')
         if not step:
             step = self.step
         scalars = list(self._scalars.items())
@@ -242,6 +243,7 @@ def simulate(
         step, episode, done, length, obs, agent_state, reward = state
     while (steps and step < steps) or (episodes and episode < episodes):
         # reset envs if necessary
+
         if done.any():
             indices = [index for index, d in enumerate(done) if d]
             results = [envs[i].reset() for i in indices]
@@ -256,6 +258,7 @@ def simulate(
                 add_to_cache(cache, envs[index].id, t)
                 # replace obs with done by initial state
                 obs[index] = result
+        # print('Mid obs',obs)
         # step agents
         obs = {k: np.stack([o[k] for o in obs]) for k in obs[0] if "log_" not in k}
         action, agent_state = agent(obs, done, agent_state)
@@ -272,6 +275,7 @@ def simulate(
         results = [r() for r in results]
         obs, reward, done = zip(*[p[:3] for p in results])
         obs = list(obs)
+        # print(obs)
         reward = list(reward)
         done = np.stack(done)
         episode += int(done.sum())
@@ -349,6 +353,7 @@ def simulate(
         while len(cache) > 1:
             # FIFO
             cache.popitem(last=False)
+    # print('new obs',obs)
     return (step - steps, episode - episodes, done, length, obs, agent_state, reward)
 
 

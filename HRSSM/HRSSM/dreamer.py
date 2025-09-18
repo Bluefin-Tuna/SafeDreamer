@@ -1,12 +1,20 @@
 import argparse
 import functools
 import os
+os.environ['MUJOCO_GL'] = 'egl'
+os.environ['PYOPENGL_PLATFORM'] = 'egl'
 import pathlib
 import sys
 import json
+# import OpenGL
+# OpenGL.FULL_LOGGING = False
+# from OpenGL import GL
 
-os.environ["MUJOCO_GL"] = "osmesa"
-
+# os.environ["MUJOCO_GL"] = "osmesa"
+# os.environ["PYOPENGL_PLATFORM"] = "osmesa"
+# os.environ['MUJOCO_GL'] = 'egl'
+# os.environ["PYOPENGL_PLATFORM"] = "egl"
+# os.environ["OSMESA_LIBRARY"] = "/usr/lib/x86_64-linux-gnu/libOSMesa.so.8"
 import numpy as np
 import ruamel.yaml as yaml
 
@@ -20,6 +28,7 @@ import envs.wrappers_v3 as wrappers_v3
 import envs.from_gym as from_gym
 from parallel import Parallel, Damy
 import car_dreamer
+import envs.safetygym as safetygym
 
 import torch
 from torch import nn
@@ -101,6 +110,7 @@ class Dreamer(nn.Module):
         return policy_output, state
 
     def _policy(self, obs, state, training):
+        # print(obs['image'].shape)
         if state is None:
             # batch_size = len(obs["image" if "image" in obs else "obs"]) #Geigh
             batch_size = len(obs["image" if "image" in obs else "obs"])
@@ -151,6 +161,7 @@ class Dreamer(nn.Module):
 
     def _train(self, data):
         metrics = {}
+        # print(data)
         post, context, mets = self._wm._train(data)
         metrics.update(mets)
         start = post
@@ -283,12 +294,19 @@ def make_env(config, mode):
         # print(env)
         env = from_gym.FromGym(env)
         env = wrappers.wrap_env(env, argparse.Namespace(**(wrapper_dict)))
-
+    elif "safetygym" in suite:
+        print('Loading suite')
+        print(task)
+        wrapper_dict = config.wrapper
+        env = safetygym.SafetyGym(task,mode=config.mode)
+        print(config.mode)
+        # env._mode = config.safetygym.mode
+        env = wrappers.wrap_env(env, argparse.Namespace(**(wrapper_dict)))
 
     else:
         raise NotImplementedError(suite)
     env = wrappers.UUID(env)
-    if suite != 'carla':
+    if suite != 'carla' and suite != 'safetygym':
         env = wrappers_v3.TimeLimit(env, config.time_limit)
         env = wrappers_v3.SelectAction(env, key="action")
         env = wrappers.UUID(env)
@@ -296,6 +314,7 @@ def make_env(config, mode):
         env = wrappers.ClipAction(env)
         if suite == "minecraft":
             env = wrappers.RewardObs(env)
+        
     return env
 
 def main(config):
@@ -341,7 +360,7 @@ def main(config):
     config.num_actions = acts.n if hasattr(acts, "n") else acts.shape[0]
 
     state = None
-    if not config.offline_traindir:
+    if not config.offline_traindir and 'eval' not in config.logdir:
         prefill = max(0, config.prefill - count_steps(config.traindir))
         print(f"Prefill dataset ({prefill} steps).")
         if hasattr(acts, "discrete"):
@@ -377,16 +396,30 @@ def main(config):
     print("Simulate agent.")
     train_dataset = make_dataset(train_eps, config)
     eval_dataset = make_dataset(eval_eps, config)
-    agent = Dreamer(
-        # train_envs[0].observation_space,
-        # train_envs[0].action_space,
-        train_envs[0].obs_space,
-        train_envs[0].act_space,
-        config,
-        logger,
-        train_dataset,
-    ).to(config.device)
-    agent.requires_grad_(requires_grad=False)
+    print(train_envs[0].obs_space)
+    if 'carla' in config.task:
+        agent = Dreamer(
+            # train_envs[0].observation_space,
+            # train_envs[0].action_space,
+            train_envs[0].obs_space,
+            train_envs[0].act_space,
+            config,
+            logger,
+            train_dataset,
+        ).to(config.device)
+        agent.requires_grad_(requires_grad=False)
+    else:
+        agent = Dreamer(
+            # train_envs[0].observation_space,
+            # train_envs[0].action_space,
+            train_envs[0].obs_space,
+            train_envs[0].act_space,
+            config,
+            logger,
+            train_dataset,
+        ).to(config.device)
+        agent.requires_grad_(requires_grad=False)
+        
     if (logdir / "latest.pt").exists():
         # print('Loading Model')
         # checkpoint = torch.load(logdir / "latest.pt")
@@ -400,9 +433,10 @@ def main(config):
         agent.load_state_dict(checkpoint)         # load it directly
 
     # make sure eval will be executed once after config.steps
+    test_iters = 0
     while agent._step < config.steps + config.eval_every:
         logger.write()
-        if config.eval_episode_num > 0:
+        if config.eval_episode_num > 0 or 'eval' in config.logdir:
             print("Start evaluation.")
             eval_policy = functools.partial(agent, training=False)
             tools.simulate(
@@ -414,26 +448,33 @@ def main(config):
                 is_eval=True,
                 episodes=config.eval_episode_num,
             )
-            if config.video_pred_log:
-                video_pred = agent._wm.video_pred(next(eval_dataset))
-                logger.video("eval_openl", to_np(video_pred))
-        print("Start training.")
-        state = tools.simulate(
-            agent,
-            train_envs,
-            train_eps,
-            config.traindir,
-            logger,
-            limit=config.dataset_size,
-            steps=config.eval_every,
-            state=state,
-        )
-        # items_to_save = {
-        #     "agent_state_dict": agent.state_dict(),
-        #     "optims_state_dict": tools.recursively_collect_optim_state_dict(agent),
-        # }
-        # if logger.full_log:
-        torch.save(agent.state_dict(), logdir / "latest.pt")
+            print('Eval finished.')
+            if 'eval' in config.logdir:
+                test_iters+=1
+                if test_iters == 30:
+                    break
+            # if config.video_pred_log:
+            #     video_pred = agent._wm.video_pred(next(eval_dataset))
+            #     logger.video("eval_openl", to_np(video_pred))
+        
+        if 'eval' not in config.logdir:
+            print("Start training.")
+            state = tools.simulate(
+                agent,
+                train_envs,
+                train_eps,
+                config.traindir,
+                logger,
+                limit=config.dataset_size,
+                steps=config.eval_every,
+                state=state,
+            )
+            # items_to_save = {
+            #     "agent_state_dict": agent.state_dict(),
+            #     "optims_state_dict": tools.recursively_collect_optim_state_dict(agent),
+            # }
+            # if logger.full_log:
+            torch.save(agent.state_dict(), logdir / "latest.pt")
     for env in train_envs + eval_envs:
         try:
             env.close()

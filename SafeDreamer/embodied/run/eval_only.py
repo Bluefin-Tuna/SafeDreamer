@@ -320,6 +320,9 @@ def eval_only(agent, env, logger, args, lag):
   elif 'random' in args.mode:
     print('Running Random policy')
     policy = lambda *args: agent.policy(*args, mode='random')
+  elif 'sample' in args.mode:
+    print('Running Sample policy')
+    policy = lambda *args: agent.policy(*args, mode='sample')
   else:
     policy = lambda *args: agent.policy(*args, mode='eval')
   # policy = lambda *args: agent.policy(*args, mode='surprise')

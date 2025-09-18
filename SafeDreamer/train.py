@@ -36,7 +36,7 @@ def main(argv=None):
   config = embodied.Flags(config).parse(other)
    #now_time + '_' + str(config.method) + '_' + str(config.task) + '_' + str(config.seed)
   # logdir_algo = 'cargoal_1_standard'
-  logdir_algo = 'cargoal_1_geigh_3' if config.run.logdir_algo == '' else config.run.logdir_algo
+  logdir_algo = 'cargoal_1_single_dropout_less' if config.run.logdir_algo == '' else config.run.logdir_algo
   # logdir_algo = 'cargoal_1_geigh_3'
   print('args mode: ',config.run.mode)
   print('args step: ',config.run.steps)

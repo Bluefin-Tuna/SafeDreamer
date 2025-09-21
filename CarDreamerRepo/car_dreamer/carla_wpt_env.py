@@ -109,8 +109,11 @@ class CarlaWptEnv(CarlaBaseEnv):
         # Time penalty
         time_penalty = -reward_scales["time"]
 
-        # Total reward
+        ###
+        # Stabilizer: clip per-step reward to keep value targets bounded
         total_reward = r_waypoints + r_speed + r_collision + r_out_of_lane + r_destination + time_penalty
+        total_reward = float(np.clip(total_reward, -10.0, 10.0))
+        ###
 
         ttc = TTCCalculator.get_ttc(ego, self._world.carla_world, self._world.carla_map)
 

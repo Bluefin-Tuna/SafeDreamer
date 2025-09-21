@@ -38,9 +38,11 @@ vit_algorithm = {
 
 
 def make_agent(obs_shape, action_shape, args, agent_args: dict):
+	print(args.encoder, args.algorithm)
 	if args.encoder == 'cnn':
 		return algorithm[args.algorithm](obs_shape, action_shape, args, **agent_args)
 	elif args.encoder == 'vit':
+		print(obs_shape, action_shape, args, agent_args.keys())
 		return vit_algorithm[args.algorithm](obs_shape, action_shape, args, **agent_args)
 	else:
 		raise ValueError(f'unknown encoder "{args.encoder}"')

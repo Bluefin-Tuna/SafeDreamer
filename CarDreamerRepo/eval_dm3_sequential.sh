@@ -15,6 +15,9 @@ DIR_NAME=$(basename "$(dirname "$CHECKPOINT_PATH")")
 LOG_FILE="logdir/evals/eval_log_${CARLA_PORT}_${MODE}.log"
 LOG_DIR="logdir/evals/${DIR_NAME}_${TASK}_${MODE}"
 
+echo "CARLA_ROOT: $CARLA_ROOT"
+echo "PYTHONPATH: $PYTHONPATH"
+
 CARLA_SERVER_COMMAND="$CARLA_ROOT/CarlaUE4.sh -RenderOffScreen -carla-port=$CARLA_PORT -benchmark -fps=10"
 EVAL_SCRIPT="dreamerv3/eval.py"
 COMMON_PARAMS="--env.world.carla_port $CARLA_PORT --dreamerv3.jax.policy_devices $GPU_DEVICE --dreamerv3.run.from_checkpoint $CHECKPOINT_PATH --dreamerv3.run.mode $MODE --env.mode $MODE --dreamerv3.logdir $LOG_DIR --task $TASK"
@@ -25,6 +28,7 @@ EVAL_COMMAND="python -u $EVAL_SCRIPT $COMMON_PARAMS $ADDITIONAL_PARAMS"
 
 log_with_timestamp() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a $LOG_FILE
+    # echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> $LOG_FILE
 }
 
 launch_carla() {

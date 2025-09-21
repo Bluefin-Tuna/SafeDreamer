@@ -1,19 +1,19 @@
-name: madi
+name: madi.baseline.eihcl.research
 channels:
   - defaults
 dependencies:
-  - python=3.7.6
-  - cudatoolkit=9.2
+  - python=3.10
+  - cudatoolkit
   - absl-py
   - pyparsing
   - pip
   - pip:
-    - numpy==1.19.5
-    - torch==1.7.1
-    - torchvision==0.8.2
-    - gym==0.21.0
-    - importlib-metadata<5.0
-    - pillow==6.2.0
+    - numpy
+    - torch
+    - torchvision
+    - gym
+    - importlib-metadata
+    - pillow
     - termcolor
     - imageio
     - imageio-ffmpeg

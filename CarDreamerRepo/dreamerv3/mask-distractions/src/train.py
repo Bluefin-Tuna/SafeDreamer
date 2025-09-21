@@ -7,6 +7,8 @@ import time
 import sys
 import torch.nn.functional as F
 import cv2
+import imageio
+from collections import deque
 # Get the directory of the current script
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -69,28 +71,45 @@ def wrap_env(env, config):
             env = embodied.wrappers.ClipAction(env, name)
     return env
 
-def stack_single_observation(frame, frame_stack=3, size=96):
+def _preprocess_frame_np(frame, size=96):
     """
-    frame: np.array or torch tensor (H, W, 3)
-    frame_stack: number of frames to stack
-    size: resize H, W to this
-    Returns: (3*frame_stack, size, size) tensor
+    Convert an (H, W, 3) frame to (3, size, size) uint8 in [0, 255].
     """
-    if isinstance(frame, np.ndarray):
-        frame = torch.tensor(frame)
+    if frame is None:
+        raise ValueError('Received None frame in preprocessing')
+    if isinstance(frame, torch.Tensor):
+        frame = frame.detach().cpu().numpy()
+    # Ensure float32 for scaling
+    frame_np = frame.astype(np.float32, copy=False)
+    # If appears to be 0..1, scale to 0..255
+    if frame_np.max() <= 1.0:
+        frame_np = np.clip(frame_np * 255.0, 0, 255)
+    # Resize to (size, size)
+    frame_np = cv2.resize(frame_np, (size, size), interpolation=cv2.INTER_AREA)
+    # Convert to uint8 and CHW
+    frame_np = frame_np.astype(np.uint8)
+    chw = np.transpose(frame_np, (2, 0, 1))
+    return chw
 
-    # Convert to (C, H, W)
-    frame = frame.permute(2, 0, 1).unsqueeze(0).float()  # (1, 3, H, W)
+def init_frame_buffer(first_frame, frame_stack=3, size=96):
+    """
+    Initialize deque with the first processed frame repeated frame_stack times.
+    Returns (deque, stacked_obs CHW with C=3*frame_stack).
+    """
+    proc = _preprocess_frame_np(first_frame, size)
+    buf = deque(maxlen=frame_stack)
+    for _ in range(frame_stack):
+        buf.append(proc)
+    stacked = np.concatenate(list(buf), axis=0)
+    return buf, stacked
 
-    # Resize
-    frame = F.interpolate(frame, size=(size, size), mode='bilinear', align_corners=False)
-
-    frame = frame.squeeze(0)  # (3, size, size)
-
-    # Stack `frame_stack` copies along channel dimension
-    stacked = torch.cat([frame] * frame_stack, dim=0)  # (3*frame_stack, size, size)
-
-    return stacked
+def push_frame_and_stack(buf, frame, size=96):
+    """
+    Append new processed frame and return stacked CHW (C=3*frame_stack).
+    """
+    proc = _preprocess_frame_np(frame, size)
+    buf.append(proc)
+    return np.concatenate(list(buf), axis=0)
 
 def evaluate(env, agent, mask_rec, args, L, step, test_env=False, test_mode=None):
     episode_rewards = []
@@ -130,6 +149,70 @@ def prepare_action_for_step(raw_action, n_actions):
     one_hot_action[action_index] = 1.0
     
     return one_hot_action
+
+def evaluate_discrete(env, agent, simple_args, L, step, video_dir=None, fps=25):
+    """
+    Evaluate policy on the same env API (embodied) using one-hot discrete actions
+    and stacked frame observations.
+    """
+    episode_rewards = []
+    if video_dir is not None:
+        os.makedirs(video_dir, exist_ok=True)
+    for i in range(simple_args.eval_episodes):
+        # Reset env
+        check, info = env.step({'action': None, 'reset': True})
+        frames = []
+        try:
+            if isinstance(check.get('camera', None), np.ndarray):
+                frames.append(check['camera'])
+            elif isinstance(check.get('birdeye_wpt', None), np.ndarray):
+                frames.append(check['birdeye_wpt'])
+        except Exception:
+            pass
+        frame_buffer, obs = init_frame_buffer(
+            check['birdeye_wpt'],
+            frame_stack=simple_args.frame_stack,
+            size=simple_args.image_crop_size,
+        )
+        done = False
+        ep_reward = 0.0
+        with torch.no_grad():
+            while not done:
+                action = agent.select_action(obs, test_env=True)
+                action_one_hot = prepare_action_for_step(action, n_actions=15)
+                check, info = env.step({'action': action_one_hot, 'reset': False})
+                try:
+                    if isinstance(check.get('camera', None), np.ndarray):
+                        frames.append(check['camera'])
+                    elif isinstance(check.get('birdeye_wpt', None), np.ndarray):
+                        frames.append(check['birdeye_wpt'])
+                except Exception:
+                    pass
+                obs = push_frame_and_stack(
+                    frame_buffer,
+                    check['birdeye_wpt'],
+                    size=simple_args.image_crop_size,
+                )
+                reward = check['reward']
+                done = True if (check['is_terminal'] or check['is_last']) else False
+                ep_reward += reward
+        # Save video
+        if video_dir is not None and len(frames) > 0:
+            try:
+                # Ensure uint8 HxWx3
+                frames_uint8 = []
+                for fr in frames:
+                    fr_np = fr
+                    if fr_np.dtype != np.uint8:
+                        fr_np = (np.clip(fr_np, 0.0, 1.0) * 255.0).astype(np.uint8) if fr_np.max() <= 1.0 else fr_np.astype(np.uint8)
+                    frames_uint8.append(fr_np)
+                imageio.mimsave(os.path.join(video_dir, f'eval_step{step}_ep{i}.mp4'), frames_uint8, fps=fps)
+            except Exception:
+                pass
+        L.log('eval/episode_reward', ep_reward, step)
+        episode_rewards.append(ep_reward)
+    if episode_rewards:
+        L.log('eval/mean_reward', float(np.mean(episode_rewards)), step)
 
 def main(argv=None):
     model_configs = yaml.YAML(typ="safe").load((embodied.Path(__file__).parent / "dreamerv3.yaml").read())
@@ -179,8 +262,9 @@ def main(argv=None):
     # embodied.run.train(agent, env, replay, logger, args)
 
     # Init wandb
+    # import wandb
     # wandb.init(project="madi", config=vars(args), name=utils.set_experiment_name(args),
-    #             mode=args.wandb_mode)
+                # mode=args.wandb_mode)
     print(args)
     print(env.act_space)
     start_training_time = time.time()
@@ -191,13 +275,36 @@ def main(argv=None):
 
     # Initialize environments
     gym.logger.set_level(40)
-    simple_args = parse_args()
+    # Build default mask-distractions args without reading CLI.
+    import types, sys as _sys
+    _saved_argv = list(_sys.argv)
+    try:
+        _sys.argv = [_sys.argv[0]]
+        simple_args = parse_args()
+    finally:
+        _sys.argv = _saved_argv
+
+    # Force desired mask defaults here for faster iteration.
+    simple_args.mask_type = 'hard'
+    simple_args.mask_threshold_type = 'fix'
+    simple_args.mask_threshold = 0.0
+    simple_args.train_steps = 100000
+    simple_args.init_steps = 5000
+    simple_args.eval_episodes = 1
+    ###
+    # Stabilizers: lower LRs, shorter target update, lower discount
+    simple_args.actor_lr = 1e-4
+    simple_args.critic_lr = 1e-4
+    simple_args.critic_tau = 0.005
+    simple_args.discount = 0.98
+    ###
     # env, train_env_eval, test_envs, test_modes = utils.make_envs(args)
+    print(simple_args)
 
     # Prepare agent
     assert torch.cuda.is_available(), 'must have cuda enabled'
     replay_buffer = ReplayBuffer(
-        obs_shape=(9,96,96),#(128, 128, 3),
+        obs_shape=(9,96,96),#(128, 128, 3), # Duplicate 3 of Carla, Carla is 128 but MADI needs 96
         action_shape=(15,),
         capacity=simple_args.train_steps,
         batch_size=28
@@ -218,6 +325,8 @@ def main(argv=None):
     L = Logger(work_dir)
     mask_rec = None
     start_time = time.time()
+    frame_buffer = None
+    last_eval_interval = -1  # ensure first eligible interval runs once when episode ends
     for step in range(start_step, simple_args.train_steps + 1):
         if done:
             if step > start_step:
@@ -225,15 +334,14 @@ def main(argv=None):
                 start_time = time.time()
                 L.dump(step)
 
-            # Evaluate agent periodically
-            if step % simple_args.eval_freq == 0:
+            # Evaluate once per interval when episode ends; avoids missing intervals when mid-episode
+            cur_interval = step // simple_args.eval_freq if simple_args.eval_freq > 0 else -1
+            if step >= simple_args.eval_freq and cur_interval > last_eval_interval:
                 print('Evaluating:', work_dir)
                 L.log('eval/episode', episode, step)
-                # evaluate(env, agent, mask_rec, args, L, step)
-                # if test_envs is not None:
-                #     for test_env, test_mode in zip(test_envs, test_modes):
-                #         evaluate(test_env, agent, mask_rec, args, L, step, test_env=True, test_mode=test_mode)
+                evaluate_discrete(env, agent, simple_args, L, step, video_dir=os.path.join(work_dir, 'videos'), fps=25)
                 L.dump(step)
+                last_eval_interval = cur_interval
 
             # Periodically save the agent
             if (step > start_step and step % simple_args.save_freq == 0) or step == 1e5:
@@ -256,16 +364,37 @@ def main(argv=None):
             # obs = cv2.resize(check['birdeye_wpt'], (100, 100))   # still (H, W, C)
             # # Reorder to (C, H, W)
             # obs = np.transpose(obs, (2, 0, 1))
-            obs = stack_single_observation(check['birdeye_wpt'])
+            if frame_buffer is None:
+                frame_buffer, obs = init_frame_buffer(
+                    check['birdeye_wpt'],
+                    frame_stack=simple_args.frame_stack,
+                    size=simple_args.image_crop_size,
+                )
+            else:
+                # reset: reinitialize buffer with current frame
+                frame_buffer, obs = init_frame_buffer(
+                    check['birdeye_wpt'],
+                    frame_stack=simple_args.frame_stack,
+                    size=simple_args.image_crop_size,
+                )
+            # Debug: log and occasionally print input ranges
+            try:
+                raw_max = float(np.max(check['birdeye_wpt']))
+                obs_max = float(np.max(obs))
+                L.log('debug/raw_obs_max', raw_max, step)
+                L.log('debug/obs_max', obs_max, step)
+                if step % 200 == 0:
+                    print(f"[InputMax][reset] step {step} raw_max={raw_max:.3f} obs_max={obs_max}")
+            except Exception as _e:
+                pass
             # obs = env._env.reset()
-            print(obs.shape)
             done = False
             episode_reward = 0
             episode_step = 0
             episode += 1
 
         # Sample action for data collection
-        if step < simple_args.init_steps:
+        if step < simple_args.init_steps: # FLAG
             n_actions = 15
 
             # Randomly choose an index
@@ -305,14 +434,30 @@ def main(argv=None):
 
         # # Reorder to (C, H, W)
         # next_obs = np.transpose(next_obs, (2, 0, 1))
-        next_obs = stack_single_observation(check['birdeye_wpt'])
+        next_obs = push_frame_and_stack(
+            frame_buffer,
+            check['birdeye_wpt'],
+            size=simple_args.image_crop_size,
+        )
+        # Debug: log and occasionally print input ranges
+        try:
+            raw_next_max = float(np.max(check['birdeye_wpt']))
+            next_obs_max = float(np.max(next_obs))
+            L.log('debug/raw_next_obs_max', raw_next_max, step)
+            L.log('debug/next_obs_max', next_obs_max, step)
+            if step % 200 == 0:
+                print(f"[InputMax][step]  step {step} raw_max={raw_next_max:.3f} obs_max={next_obs_max}")
+        except Exception as _e:
+            pass
         # print(next_obs.shape)  # (3, 100, 100)
 
         reward = check['reward']
         done = True if (check['is_terminal'] or check['is_last']) else False 
 
-        done_bool = 0 if episode_step + 1 == 500 else float(done) #500 is max steps.
-        replay_buffer.add(obs, action, reward, next_obs, done_bool)
+        # Treat time_exceeded as terminal (count as done)
+        done_for_buffer = float(done)
+        # store the executed one-hot action for consistency with discrete agent
+        replay_buffer.add(obs, action_one_hot, reward, next_obs, done_for_buffer)
         episode_reward += reward
         episode_step += 1
         obs = next_obs

@@ -39,6 +39,7 @@ carla_four_lane:
     observation.enabled: [camera, collision, birdeye_wpt, lidar, birdeye_raw, birdeye_with_traffic_lights, birdeye_gt] #Geigh Zollicoffer
     num_vehicles: 50
     <<: *carla_wpt
+    terminal.time_limit: 500
     lane_start_points:
       - [5.8, 100, 0.1]
       - [9.0, 100, 0.1]
@@ -51,8 +52,8 @@ carla_four_lane:
       - [15.6, -58, 0.1]
 
   dreamerv3:
-    encoder.cnn_keys: "birdeye_wpt" #'camera|birdeye_wpt|lidar|birdeye_raw|birdeye_with_traffic_lights|birdeye_gt' #Used for multiple Representations
-    decoder.cnn_keys: "birdeye_wpt" #'camera|birdeye_wpt|lidar|birdeye_raw|birdeye_with_traffic_lights|birdeye_gt' #Used for multiple Representations
+    encoder.cnn_keys: 'camera|birdeye_wpt|lidar|birdeye_raw|birdeye_with_traffic_lights|birdeye_gt' #Used for multiple Representations # "birdeye_wpt"
+    decoder.cnn_keys: 'camera|birdeye_wpt|lidar|birdeye_raw|birdeye_with_traffic_lights|birdeye_gt' #Used for multiple Representations # "birdeye_wpt"
     run.log_keys_video: [camera, birdeye_wpt, lidar]
     run.log_keys_max: "collision"
 

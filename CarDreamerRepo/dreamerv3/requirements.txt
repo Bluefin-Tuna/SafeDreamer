@@ -2,8 +2,8 @@ cloudpickle==3.0.0
 crafter==1.8.3
 gym==0.12.5
 dm_control==1.0.18
-jax==0.4.34
-jaxlib==0.4.34
+jax[cuda12]
+jaxlib
 numpy==1.24.3
 optax==0.2.2
 rich==13.7.1

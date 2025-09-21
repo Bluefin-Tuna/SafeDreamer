@@ -118,7 +118,7 @@ run_eval() {
 
 # # bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_dropout/checkpoint.ckpt surprise_jitter_3 carla_four_lane
 
-# bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_dropout/checkpoint.ckpt random_occlusion_1 carla_four_lane
+bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6/checkpoint.ckpt random_occlusion_1 carla_four_lane
 # bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_dropout/checkpoint.ckpt random_occlusion_2 carla_four_lane
 # bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_dropout/checkpoint.ckpt random_occlusion_3 carla_four_lane
 # bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_dropout/checkpoint.ckpt random_occlusion_4 carla_four_lane

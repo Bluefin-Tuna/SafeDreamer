@@ -152,7 +152,7 @@ class SafetyGym(embodied.Env):
               image_jitter = obs[nov_key].astype(np.float32)
               brightness_factor = np.random.uniform(mu, std)
               contrast_factor = np.random.uniform(mu, std)
-              image_jitter = np.clip(image_jitter * contrast_factor + brightness_factor * 10, 0, 255).astype(np.uint8)
+              image_jitter = np.clip(image_jitter * contrast_factor + brightness_factor*5, 0, 255).astype(np.uint8)
               obs[nov_key] = image_jitter
               obs['high_def_nov'] = np.clip(obs['high_def_nov'].astype(np.float32) * contrast_factor + brightness_factor * 10, 0, 255).astype(np.uint8)
 
@@ -163,7 +163,8 @@ class SafetyGym(embodied.Env):
               image_jitter = obs[nov_key].astype(np.float32)
               brightness_factor = np.random.uniform(mu, std)
               contrast_factor = 0
-              image_jitter = np.clip(image_jitter * contrast_factor + brightness_factor * 10, 0, 255).astype(np.uint8)
+              image_jitter = np.clip(image_jitter * contrast_factor + brightness_factor, 0, 255).astype(np.uint8)
+              # image_jitter = np.clip(image_jitter * contrast_factor + brightness_factor * 10, 0, 255).astype(np.uint8)
               obs[nov_key] = image_jitter
               obs['high_def_nov'] = np.clip(obs['high_def_nov'].astype(np.float32) * contrast_factor + brightness_factor * 10, 0, 255).astype(np.uint8)
 

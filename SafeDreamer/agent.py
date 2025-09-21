@@ -134,6 +134,207 @@ class Agent(nj.Module):
               stacked_latents
           )
       elif 'sample' in mode:
+        # First, get baseline surprise with original observation
+        base_surprise = self.wm.rssm.get_dist(latent).kl_divergence(
+            self.wm.rssm.get_dist(prior_orig)
+        )
+
+        def median_blur(image: jnp.ndarray, ksize: int) -> jnp.ndarray:
+            """
+            Apply median blur to a batch of images (NHWC format).
+
+            Args:
+                image: jnp.ndarray of shape (N, H, W, C)
+                ksize: odd integer kernel size (e.g. 3, 5, 7)
+
+            Returns:
+                Blurred image of same shape as input.
+            """
+            assert ksize % 2 == 1, "ksize must be odd"
+            pad = ksize // 2
+            N, H, W, C = image.shape
+
+            # Pad with reflect to mimic OpenCV behavior
+            padded = jnp.pad(
+                image, ((0, 0), (pad, pad), (pad, pad), (0, 0)), mode="reflect"
+            )
+
+            # Extract patches using dynamic slicing
+            def get_patch(n, i, j):
+                return jax.lax.dynamic_slice(
+                    padded, (n, i, j, 0), (1, ksize, ksize, C)
+                ).reshape(-1, C)
+
+            # Meshgrid over image coords
+            ii, jj = jnp.meshgrid(jnp.arange(H), jnp.arange(W), indexing="ij")
+
+            # Vectorize over batch, height, width
+            patches = jax.vmap(
+                lambda n: jax.vmap(
+                    lambda i_row, j_row: jax.vmap(
+                        get_patch, in_axes=(None, 0, 0)
+                    )(n, i_row, j_row),
+                    in_axes=(0, 0),
+                )(ii, jj),
+                in_axes=(0,),
+            )(jnp.arange(N))  # (N, H, W, ksize*ksize, C)
+
+            # Take median across neighborhood axis
+            result = jnp.median(patches, axis=3)  # (N, H, W, C)
+            return result
+        
+        def gaussian_sharpen(image: jnp.ndarray, sigma: float = 1.0, strength: float = 1.0) -> jnp.ndarray:
+          """
+          Apply Gaussian-based unsharp mask sharpening to a batch of images (NHWC format).
+          
+          Args:
+              image: jnp.ndarray of shape (N, H, W, C) with values in [0, 1]
+              sigma: float, standard deviation for Gaussian blur
+              strength: float, sharpening strength (higher = more sharpening)
+          
+          Returns:
+              Sharpened image of same shape as input.
+          """
+          # Generate Gaussian kernel
+          # ksize = 2 * jnp.ceil(3 * sigma) + 1  # Kernel size based on 3-sigma rule
+          ksize = 2 * 3 + 1
+          # if ksize % 2 == 0:
+          #     ksize += 1  # Ensure odd size
+          
+          pad = ksize // 2
+          x = jnp.arange(-pad, pad + 1)
+          y = jnp.arange(-pad, pad + 1)
+          xx, yy = jnp.meshgrid(x, y)
+          
+          # 2D Gaussian kernel
+          kernel = jnp.exp(-(xx**2 + yy**2) / (2 * sigma**2))
+          kernel = kernel / jnp.sum(kernel)  # Normalize
+          
+          N, H, W, C = image.shape
+          
+          # Pad with reflect
+          padded = jnp.pad(
+              image, ((0, 0), (pad, pad), (pad, pad), (0, 0)), mode="reflect"
+          )
+          
+          # Extract patches using dynamic slicing
+          def get_patch(n, i, j):
+              return jax.lax.dynamic_slice(
+                  padded, (n, i, j, 0), (1, ksize, ksize, C)
+              ).reshape(ksize, ksize, C)
+          
+          # Meshgrid over image coords
+          ii, jj = jnp.meshgrid(jnp.arange(H), jnp.arange(W), indexing="ij")
+          
+          # Vectorize over batch, height, width
+          patches = jax.vmap(
+              lambda n: jax.vmap(
+                  lambda i_row, j_row: jax.vmap(
+                      get_patch, in_axes=(None, 0, 0)
+                  )(n, i_row, j_row),
+                  in_axes=(0, 0),
+              )(ii, jj),
+              in_axes=(0,),
+          )(jnp.arange(N))  # (N, H, W, ksize, ksize, C)
+          
+          # Apply Gaussian blur: convolve with kernel
+          kernel_expanded = kernel[None, None, None, :, :, None]
+          blurred = jnp.sum(patches * kernel_expanded, axis=(3, 4))  # (N, H, W, C)
+          
+          # Unsharp mask: original + strength * (original - blurred)
+          sharpened = image + strength * (image - blurred)
+          
+          # Clamp to valid range
+          return jnp.clip(sharpened, 0.0, 1.0)
+        
+
+        # Smart dropout function integrated into your existing structure
+        def compute_surprise_for_obs(obs_input):
+            """Compute surprise for given observation - used for gradient computation."""
+            embed = self.wm.encoder(obs_input)
+            temp_latent, temp_prior = self.wm.rssm.obs_step(
+                prev_latent, prev_action, embed, obs_input['is_first']
+            )
+            surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(
+                self.wm.rssm.get_dist(temp_prior)
+            )
+            return surprise.mean()  # Return scalar for gradient computation
+
+        # Compute gradients to find harmful pixels
+        # surprise_grad_fn = jax.grad(compute_surprise_for_obs)
+
+        # Get image key
+        image_key = self.wm.config.encoder.cnn_keys  # [0]
+
+        # Try different dropout ratios with smart selection
+        n_samples = 40
+        # target_dropout_ratios = np.linspace(0.00, , n_samples)
+
+        total_newlat_seperate = []
+        surprises = []
+        key = random.PRNGKey(42)
+        target_dropout_ratios = np.linspace(0.00, 0.1, n_samples)
+        #Median Blur
+        sampled_obs = jax.tree_map(lambda x: x, obs)
+        sampled_obs[image_key] = median_blur(
+                obs[image_key], ksize=3
+        )
+
+        
+        embed = self.wm.encoder(sampled_obs)
+        temp_latent, temp_prior_orig = self.wm.rssm.obs_step(
+            prev_latent, prev_action, embed, obs['is_first']
+        )
+        surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(
+            self.wm.rssm.get_dist(temp_prior_orig)
+        )
+        surprises.append(surprise)
+        total_newlat_seperate.append(temp_latent)
+        #Sharpening
+        sampled_obs = jax.tree_map(lambda x: x, obs)
+        sampled_obs[image_key] = gaussian_sharpen(
+                obs[image_key]
+        )
+        embed = self.wm.encoder(sampled_obs)
+        temp_latent, temp_prior_orig = self.wm.rssm.obs_step(
+            prev_latent, prev_action, embed, obs['is_first']
+        )
+        surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(
+            self.wm.rssm.get_dist(temp_prior_orig)
+        )
+        surprises.append(surprise)
+        total_newlat_seperate.append(temp_latent)
+
+        # Add original observation (no dropout) as final candidate
+        total_newlat_seperate.append(latent)
+        surprises.append(base_surprise)
+
+        # Select best configuration
+        surprises = jnp.array(surprises)
+        min_idx = jnp.argmin(surprises)
+
+        # Stack candidates and select using advanced indexing
+        stacked_latents = jax.tree_map(
+            lambda *candidates: jnp.stack(candidates, axis=0),
+            *total_newlat_seperate
+        )
+
+        # Select the latent with lowest surprise
+        latent = jax.tree_map(
+            lambda stacked: stacked[min_idx], stacked_latents
+        )
+
+        # Check if minimum surprise is still too high
+        min_surprise = surprises[min_idx]
+        min_surprise_scalar = jnp.squeeze(min_surprise)  # ensure scalar
+
+        # Use prior_orig if surprise exceeds threshold, otherwise best latent
+        # latent = jax.lax.cond(
+        #     min_surprise_scalar > surprise_threshold,
+        #     lambda: prior_orig,     # If too high, use prior
+        #     lambda: best_latent,    # Otherwise use best dropout result
+        # )
+      elif 'sample_v0' in mode:
         # Smart gradient-based dropout instead of brute force search
 
         # First, get baseline surprise with original observation

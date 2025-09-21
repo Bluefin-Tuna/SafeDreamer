@@ -82,7 +82,7 @@ def plot_line_per_aug(data_per_aug, default_data, scenario_name):
     plt.suptitle(scenario_name.replace("_", " ").title())
     plt.tight_layout(rect=[0, 0, 1, 0.92])
     # plt.show()
-    plt.savefig(f'/home/general/Documents/work/Trolls/SafeRL/CarDreamer/CarDreamer/logdir/plots/{scenario_name}.png')
+    plt.savefig(f'/home/general/Documents/work/Trolls/SafeRL/CarDreamer/CarDreamer/CarDreamerRepo/logdir/plots/{scenario_name}.png')
 
 def plot_line_per_aug(data_per_aug, default_data, scenario_name):
     """
@@ -100,13 +100,13 @@ def plot_line_per_aug(data_per_aug, default_data, scenario_name):
     method_labels = {
         "augment_high": "Augmented",
         "random": "RME",
-        "surprise": "Controlled Representation",
+        "surprise": "Confident Representation",
         "base": "Baseline"
     }
     colors = {
         "augment_high": "tab:blue",
         "random": "tab:orange",
-        "surprise": "tab:green",
+        "surprise": "black",
         "base": "tab:red"
     }
 
@@ -139,7 +139,7 @@ def plot_line_per_aug(data_per_aug, default_data, scenario_name):
                 xs.extend([int(g) + offset for g in group_nums])
                 means.extend([data_per_aug[aug][method][g][0] for g in group_nums])
                 stds.extend([data_per_aug[aug][method][g][1] for g in group_nums])
-                max_err = 75  # Limit the visualization
+                max_err = 200  # Limit the visualization
                 stds = [min(s, max_err) for s in stds]
 
             # Plot line + points with error bars
@@ -161,11 +161,14 @@ def plot_line_per_aug(data_per_aug, default_data, scenario_name):
         # Draw vertical separators between groups
         for x in range(len(all_intensities) - 1):
             ax.axvline(x + 0.5, color="black", linestyle="--", alpha=0.9)
-        if 'four_lane' in scenario_name:
-            ax.set_title(f"{aug.capitalize()}", fontweight='bold')
+        # if 'four_lane' in scenario_name:
+        if aug =='lag':
+            ax.set_title(f"Latency", fontweight='bold', fontsize=22)
+        else:
+            ax.set_title(f"{aug.capitalize()}", fontweight='bold', fontsize=22)
             # ax.set_xlabel("Augmentation Intensity")
         if i == 0:
-            ax.set_ylabel("Score")
+            ax.set_ylabel("Score", fontsize=22)
         ax.grid(True, linestyle='--', alpha=0.5)
 
         # if 'four_lane' in scenario_name:
@@ -180,12 +183,12 @@ def plot_line_per_aug(data_per_aug, default_data, scenario_name):
 
     # Single legend at bottom
     handles, labels = axes[0].get_legend_handles_labels()
-    if 'stop_sign' in scenario_name:
-        fig.legend(handles, labels, loc='lower center', ncol=4)
+    # if 'stop_sign' in scenario_name:
+    fig.legend(handles, labels, loc='lower center', ncol=4, prop={'size': 14})
         # plt.suptitle(scenario_name.replace("_", " ").title())
     plt.tight_layout(rect=[0, 0.05, 1, 0.92])
 
-    plt.savefig(f'/home/general/Documents/work/Trolls/SafeRL/CarDreamer/CarDreamer/logdir/plots/{scenario_name}.png', bbox_inches='tight',pad_inches=0.1)
+    plt.savefig(f'/home/general/Documents/work/Trolls/SafeRL/CarDreamer/CarDreamer/CarDreamerRepo/logdir/plots/{scenario_name}.png', bbox_inches='tight',pad_inches=0.1)
 # ---------- Score function ----------
 def gen_score(file_path):
     scores = []
@@ -201,7 +204,7 @@ def gen_score(file_path):
     return np.mean(scores), np.std(scores)
 
 # ---------- Config ----------
-eval_dir = "/home/general/Documents/work/Trolls/SafeRL/CarDreamer/CarDreamer/logdir/evals/"
+eval_dir = "/home/general/Documents/work/Trolls/SafeRL/CarDreamer/CarDreamer/CarDreamerRepo/logdir/evals/"
 SCENARIOS = ["carla_four_lane", "carla_right_turn_simple", "carla_stop_sign"]
 AUG_TYPES = ["jitter", "glare", "gaussian", "lag"]
 
@@ -211,7 +214,10 @@ groups = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 number_pattern = re.compile(r"_(\d+)$")
 
 for folder in all_folders:
+    if 'bev' in folder or 'sample' in folder:
+        continue
     if folder.endswith("_Default"):
+   
         if 'carla_four_lane' in folder:
             groups["Default"]["carla_four_lane"]["Default"].append(folder)
         elif "carla_right_turn_simple" in folder:
@@ -233,7 +239,7 @@ for folder in all_folders:
 # ---------- Main loop ----------
 for scenario_key in SCENARIOS:
     data_per_aug = defaultdict(lambda: defaultdict(dict))  # aug -> method -> {group_number: (mean, std)}
-    
+    print('Data per Aug',data_per_aug)
     # Process default group data for this scenario
     default_data = defaultdict(dict)  # aug -> method -> (mean, std)
     if "Default" in groups and scenario_key in groups["Default"]:
@@ -289,7 +295,7 @@ for scenario_key in SCENARIOS:
                 metrics_path = os.path.join(eval_dir, folder, "metrics.jsonl")
                 mean, std = gen_score(metrics_path)
 
-                if 'augment_high' in folder:
+                if 'augment_high' in folder and 'bev' not in folder:
                     data_per_aug[aug_key]['augment_high'][group_key] = (mean, std)
                 elif 'random' in folder:
                     data_per_aug[aug_key]['random'][group_key] = (mean, std)

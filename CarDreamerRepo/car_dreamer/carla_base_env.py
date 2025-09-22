@@ -284,7 +284,7 @@ class CarlaBaseEnv(gym.Env):
 
         # Loop over keys and modes
         for key in nov_keys:
-            if noise_timestep == -1 or self._world._time_step==noise_timestep: 
+            if noise_timestep == -1 or self._world._time_step>=noise_timestep: 
                 print(noise_timestep)
                 if 'jitter' in self._config.mode:
                     apply_jitter(key, noise_intensity)

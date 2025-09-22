@@ -87,13 +87,19 @@ def eval_only(agent, env, logger, args):
         logger.add({"length": length, "score": score}, prefix="episode")
         print(f"Episode has {length} steps and return {score:.1f}.")
         stats = {}
+        for key in ep:
+            if 'custom' in key:
+                stats[key] = ep[key]
         for key in args.log_keys_video:
             if key in ep:
                 stats[f"policy_{key}"] = ep[key]
 
         def log(key, value):
+            print(key)
             if key == 'log_surprise_mean':
-                stats['log_surprise_mean'] = value[10] # The noise will always be the highest.
+                stats['log_surprise_mean'] = value[10] # Set value index to wanted.
+            if key == 'mu_gradients':
+                stats["mu_gradients"] = value
             if re.match(args.log_keys_sum, key):
                 stats[f"sum_{key}"] = value.sum()
             if re.match(args.log_keys_mean, key):
@@ -169,6 +175,7 @@ def main(argv=None):
             embodied.logger.TerminalOutput(),
             embodied.logger.JSONLOutput(logdir, "metrics.jsonl"),
             embodied.logger.TensorBoardOutput(logdir),
+            embodied.logger.WandBOutput(logdir.name, config)
         ],
     )
 

@@ -45,6 +45,13 @@ class Agent(nj.Module):
 
     def train_initial(self, batch_size):
         return self.wm.initial(batch_size)
+    
+    def get_recon_imgs(self, obs, posterior, prior, key):
+        reconstruct_prior = self.wm.heads['decoder'](prior)[key].mode()
+        reconstruct_post = self.wm.heads['decoder'](posterior)[key].mode()
+        truth = obs[key]
+        
+        return truth, reconstruct_prior, reconstruct_post
 
     def policy(self, obs, state, mode="train"):
 
@@ -53,6 +60,8 @@ class Agent(nj.Module):
         (prev_latent, prev_action), task_state, expl_state = state
         embed = self.wm.encoder(obs)
         latent, prior_orig = self.wm.rssm.obs_step(prev_latent, prev_action, embed, obs["is_first"])
+
+        
         if mode not in ['train', 'eval', 'explore']:
             available_keys = ["birdeye_gt","birdeye_raw","birdeye_with_traffic_lights","birdeye_wpt","camera","lidar"]
             if 'surprise' in mode:
@@ -119,7 +128,8 @@ class Agent(nj.Module):
 
                     #Sort sensors by surprise (lowest surprise first)
                     surprises_init = jnp.array(surprises)
-                    sorted_indices = jnp.argsort(surprises_init)
+                    surprises_init = surprises_init.flatten()
+                    sorted_indices = jnp.argsort(surprises_init, descending=True)
 
                     #Create N more latents by iteratively masking according to the order of sorted indices:
                     obs_iter = jax.tree_map(lambda x: x, obs)
@@ -172,8 +182,95 @@ class Agent(nj.Module):
                 embed = self.wm.encoder(obs_masked)
                 latent, temp_prior_orig = self.wm.rssm.obs_step(
                     prev_latent, prev_action, embed, obs['is_first'])
-
+                
             elif 'sample' in mode:
+                # Smart gradient-based dropout instead of brute force search
+                surprises = []
+                total_newlat_seperate = []
+                # First, get baseline surprise with original observation
+                base_surprise = self.wm.rssm.get_dist(latent).kl_divergence(self.wm.rssm.get_dist(prior_orig))
+                
+                # Smart dropout function integrated into your existing structure
+                def compute_surprise_for_obs(obs_input):
+                    """Compute surprise for given observation - used for gradient computation"""
+                    embed = self.wm.encoder(obs_input)
+                    temp_latent, temp_prior = self.wm.rssm.obs_step(
+                        prev_latent, prev_action, embed, obs_input['is_first']
+                    )
+                    surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(
+                        self.wm.rssm.get_dist(temp_prior)
+                    )
+                    return surprise.mean()  # Return scalar for gradient computation
+                
+                # Compute gradients to find harmful pixels
+                surprise_grad_fn = jax.grad(compute_surprise_for_obs)
+                #Check
+                
+                # Get image key
+                image_key = self.wm.config.encoder.cnn_keys#[0]
+                
+                # 0. Sample from the prior to get some image of the prior | Done
+                # 1. Compute surprise gradients | Done
+                # 2. Apply the modified tanh function to the surprise gradients
+                # 3. (1 - surpise_gradients) * obs_input + surprise_gradients * prior_orig
+
+                # Try different dropout ratios, but use smart selection
+                # target_dropout_ratios = np.linspace(0.65, 1, 50)  # Fewer samples, smarter selection
+
+                truth, prior_img, reconstruct_post = self.get_recon_imgs(obs, latent, prior_orig, image_key)
+
+                gradients = surprise_grad_fn(obs)
+
+                def tanh(gradients):
+                    normalized = jnp.tanh(gradients / 15)
+                    mean = jnp.mean(gradients)
+                    return normalized, mean
+
+                normalized_gradients, mean_gradients = tanh(jnp.abs(gradients[image_key]))
+
+
+                sampled_obs = jax.tree_map(lambda x: x, obs)
+                interpolated_img = (1 - normalized_gradients) * obs[image_key] + normalized_gradients * prior_img
+                sampled_obs[image_key] = interpolated_img
+                interpolated_img = jnp.array(interpolated_img)
+                video = jnp.concatenate([truth, prior_img, reconstruct_post, interpolated_img], axis=2)
+
+                # Compute latent and surprise for this dropout configuration
+                embed = self.wm.encoder(sampled_obs)
+                temp_latent, temp_prior_orig = self.wm.rssm.obs_step(
+                    prev_latent, prev_action, embed, obs['is_first']
+                )
+                surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(
+                    self.wm.rssm.get_dist(temp_prior_orig)
+                )
+                    
+                surprises.append(surprise)
+                total_newlat_seperate.append(temp_latent)
+ 
+                # Add original observation (no dropout) as final candidate
+                total_newlat_seperate.append(latent)
+                surprises.append(base_surprise)
+                
+                # Select best configuration
+                surprises = jnp.array(surprises)
+                min_idx = jnp.argmin(surprises)
+                
+                # Stack candidates and select using advanced indexing
+                stacked_latents = jax.tree_map(
+                    lambda *candidates: jnp.stack(candidates, axis=0),
+                    *total_newlat_seperate
+                )
+                
+                latent = temp_latent
+                
+                # # Select the latent with lowest surprise
+                # latent = jax.tree_map(
+                #     lambda stacked: stacked[min_idx],
+                #     stacked_latents
+                # )
+                
+
+            elif 'sample_v0' in mode:
                 # Smart gradient-based dropout instead of brute force search
                 
                 # First, get baseline surprise with original observation
@@ -329,16 +426,20 @@ class Agent(nj.Module):
         self.expl_behavior.policy(latent, expl_state)
         task_outs, task_state = self.task_behavior.policy(latent, task_state)
         expl_outs, expl_state = self.expl_behavior.policy(latent, expl_state)
+        
+        def reshape_outputs(surprises_dict):
+            reshaped = {}
+            for k, v in surprises_dict.items():
+                if k.startswith('log_surprise'):
+                    # reshape scalar [] or any shape to [1]
+                    reshaped[k] = jnp.reshape(v, (1,))
+                if k.startswith('mu_gradients'):
+                    reshaped[k] = jnp.reshape(v, (1,))
+                else:
+                    reshaped[k] = v
+            return reshaped
+
         if mode == "eval":
-            def reshape_log_surprises(surprises_dict):
-                reshaped = {}
-                for k, v in surprises_dict.items():
-                    if k.startswith('log_surprise'):
-                        # reshape scalar [] or any shape to [1]
-                        reshaped[k] = jnp.reshape(v, (1,))
-                    else:
-                        reshaped[k] = v
-                return reshaped
             outs = task_outs
             outs["action"] = outs["action"].sample(seed=nj.rng())
             outs["log_entropy"] = jnp.zeros(outs["action"].shape[:1])
@@ -346,9 +447,10 @@ class Agent(nj.Module):
                 self.wm.rssm.get_dist(prior)
             )
             # metrics = {}
-            outs.update(jaxutils.tensorstats(surprise(latent, prior_orig), "log_surprise"))
+            # outs.update({f"openl_{key}" : jaxutils.video_grid(video)})
+            # outs.update(jaxutils.tensorstats(surprise(latent, prior_orig), "log_surprise"))
             # print(outs)
-            outs = reshape_log_surprises(outs)
+            outs = reshape_outputs(outs)
             print({k: v.shape for k, v in outs.items()})
 
         elif mode == "explore":
@@ -361,6 +463,13 @@ class Agent(nj.Module):
             outs["action"] = outs["action"].sample(seed=nj.rng())
         else: #Run eval by default
             outs = task_outs
+            if mode == 'sample':
+                video = jnp.expand_dims(video, 0)
+                # interpolated_img = jnp.expand_dims(interpolated_img, 0)
+                mean_gradients = reshape_outputs({"mu_gradients": mean_gradients})["mu_gradients"]
+                # outs.update({f"openl_custom_interpolated_{image_key}": jaxutils.video_grid(interpolated_img)})
+                outs.update({f"openl_custom_{image_key}" : jaxutils.video_grid(video)})
+                outs.update({"mu_gradients": mean_gradients})
             outs["action"] = outs["action"].sample(seed=nj.rng())
             outs["log_entropy"] = jnp.zeros(outs["action"].shape[:1])
 
@@ -1299,7 +1408,7 @@ class WorldModel(nj.Module):
         context, _ = self.rssm.observe(self.encoder(data)[:6, :5], data["action"][:6, :5], data["is_first"][:6, :5])
         start = {k: v[:, -1] for k, v in context.items()}
         recon = self.heads["decoder"](context)
-        openl = self.heads["decoder"](self.rssm.imagine(data["action"][:6, 5:], start))
+        openl = self.heads["decoder"](self.rssm.iagine(data["action"][:6, 5:], start))
         for key in self.heads["decoder"].cnn_shapes.keys():
             truth = data[key][:6].astype(jnp.float32)
             model = jnp.concatenate([recon[key].mode()[:, :5], openl[key].mode()], 1)

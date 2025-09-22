@@ -51,7 +51,9 @@ declare -A BASE_CHECKPOINTS_PIXEL=(
 SCENARIOS=("carla_right_turn_simple" "carla_stop_sign")
 AUG_TYPES=("gaussian")
 # AUG_LEVELS=(0.1 0.010)
-AUG_LEVELS=($(seq 0.000 0.005 0.100))
+# AUG_LEVELS=($(seq 0.000 0.005 0.100))
+
+AUG_LEVELS=(1.0)
 
 run_eval() {
   local checkpoint="$1"
@@ -88,7 +90,7 @@ echo "=== Running Default Augmentations ==="
 for scenario in "${SCENARIOS[@]}"; do
   for aug in "${AUG_TYPES[@]}"; do
     for level in "${AUG_LEVELS[@]}"; do
-      run_eval "${BASE_CHECKPOINTS_DEFAULT_BEV[$scenario]}" "${aug}_timestep10_${level}" "$scenario"
+      run_eval "${BASE_CHECKPOINTS_DEFAULT_BEV[$scenario]}" "${aug}_sample_${level}" "$scenario"
     done
   done
 done

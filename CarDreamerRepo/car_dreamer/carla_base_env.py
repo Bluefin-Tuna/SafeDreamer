@@ -194,6 +194,7 @@ class CarlaBaseEnv(gym.Env):
         self._monitor.render(obs, info)
 
     def _simulate_failure(self):
+        np.random.seed(0)
         val_str = self._config.mode.split('_')[-1]
         try:
             number_of_failures = int(val_str)
@@ -293,7 +294,6 @@ class CarlaBaseEnv(gym.Env):
             return
         for key in nov_keys:
             if noise_timestep == -1 or self._world._time_step>=noise_timestep: 
-                print(noise_timestep)
                 if 'jitter' in self._config.mode:
                     apply_jitter(key, noise_intensity)
                 if 'glare' in self._config.mode:

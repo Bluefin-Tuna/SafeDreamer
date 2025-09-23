@@ -52,7 +52,7 @@ SCENARIOS=("carla_right_turn_simple" "carla_stop_sign" "carla_four_lane")
 AUG_TYPES=("jitter" "glare" "gaussian" "occlusion")
 # AUG_LEVELS=(0.1 0.010)
 # AUG_LEVELS=($(seq 0.000 0.005 0.100))
-PROPORTION_LEVELS=(0.75 0.50)
+PROPORTION_LEVELS=(0.75 0.875)
 
 AUG_LEVELS=(1.0)
 

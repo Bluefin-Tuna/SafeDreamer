@@ -194,8 +194,6 @@ class CarlaBaseEnv(gym.Env):
         self._monitor.render(obs, info)
 
     def _simulate_failure(self):
-        np.random.seed(0)
-
         val_str = self._config.mode.split('_')[-1]
         try:
             number_of_failures = int(val_str)
@@ -236,6 +234,13 @@ class CarlaBaseEnv(gym.Env):
         else:
             noise_timestep = -1 #Do all the time
 
+        match = re.search(r'(?:^|_)proportion([+-]?(?:\d+(?:\.\d*)?|\.\d+))(?:_|$)', self._config.mode)
+        if match:
+            proportion = float(match.group(1))
+        else:
+            proportion = -1.0
+
+        # print(proportion)
         # Helper: apply transformation to a single key
         def apply_jitter(key, noise_intensity):
             mu = 20 * noise_intensity
@@ -283,6 +288,9 @@ class CarlaBaseEnv(gym.Env):
 
 
         # Loop over keys and modes
+        # print(self._world._time_step)
+        if random.random() > proportion:
+            return
         for key in nov_keys:
             if noise_timestep == -1 or self._world._time_step>=noise_timestep: 
                 print(noise_timestep)

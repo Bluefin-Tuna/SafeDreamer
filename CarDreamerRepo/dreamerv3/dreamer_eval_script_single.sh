@@ -48,10 +48,11 @@ declare -A BASE_CHECKPOINTS_PIXEL=(
 # )
 
 # Scenarios
-SCENARIOS=("carla_right_turn_simple" "carla_stop_sign")
-AUG_TYPES=("gaussian")
+SCENARIOS=("carla_right_turn_simple" "carla_stop_sign" "carla_four_lane")
+AUG_TYPES=("jitter" "glare" "gaussian" "occlusion")
 # AUG_LEVELS=(0.1 0.010)
 # AUG_LEVELS=($(seq 0.000 0.005 0.100))
+PROPORTION_LEVELS=(0.75 0.50)
 
 AUG_LEVELS=(1.0)
 
@@ -85,15 +86,42 @@ run_eval() {
 #     done
 #   done
 # done
+#augtype_policytype_timestep$_intensity$
+
+echo "=== Running Sampled Augmentations ==="
+for scenario in "${SCENARIOS[@]}"; do
+  for aug in "${AUG_TYPES[@]}"; do
+    for level in "${AUG_LEVELS[@]}"; do
+      for proport in "${PROPORTION_LEVELS[@]}"; do
+        run_eval "${BASE_CHECKPOINTS_DEFAULT_BEV[$scenario]}" "${aug}_sample_proportion${proport}_timestep10_${level}" "$scenario"
+      done
+    done
+  done
+done
+
 
 echo "=== Running Default Augmentations ==="
 for scenario in "${SCENARIOS[@]}"; do
   for aug in "${AUG_TYPES[@]}"; do
     for level in "${AUG_LEVELS[@]}"; do
-      run_eval "${BASE_CHECKPOINTS_DEFAULT_BEV[$scenario]}" "${aug}_sample_${level}" "$scenario"
+      for proport in "${PROPORTION_LEVELS[@]}"; do
+        run_eval "${BASE_CHECKPOINTS_DEFAULT_BEV[$scenario]}" "${aug}_proportion${proport}_timestep10_${level}" "$scenario"
+      done
     done
   done
 done
+
+echo "=== Running Filter Augmentations ==="
+for scenario in "${SCENARIOS[@]}"; do
+  for aug in "${AUG_TYPES[@]}"; do
+    for level in "${AUG_LEVELS[@]}"; do
+      for proport in "${PROPORTION_LEVELS[@]}"; do
+        run_eval "${BASE_CHECKPOINTS_DEFAULT_BEV[$scenario]}" "${aug}_filter_proportion${proport}_timestep10_${level}" "$scenario"
+      done
+    done
+  done
+done
+
 
 # echo "=== Running Pixel Augmentations ==="
 # for scenario in "${SCENARIOS[@]}"; do

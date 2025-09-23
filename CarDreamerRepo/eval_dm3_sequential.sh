@@ -12,8 +12,8 @@ MODE=$4
 TASK=$5
 
 DIR_NAME=$(basename "$(dirname "$CHECKPOINT_PATH")")
-LOG_FILE="logdir/evals/eval_log_${CARLA_PORT}_${MODE}.log"
-LOG_DIR="logdir/evals/${DIR_NAME}_${TASK}_${MODE}"
+LOG_FILE="logdir/evals_finegrained/eval_log_${CARLA_PORT}_${MODE}.log"
+LOG_DIR="logdir/evals_finegrained/${DIR_NAME}_${TASK}_${MODE}"
 
 CARLA_SERVER_COMMAND="$CARLA_ROOT/CarlaUE4.sh -RenderOffScreen -carla-port=$CARLA_PORT -benchmark -fps=10"
 EVAL_SCRIPT="dreamerv3/eval.py"

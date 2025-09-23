@@ -146,6 +146,8 @@ def eval_only(agent, env, logger, args):
         policy = lambda *args: agent.policy(*args, mode="random")
     elif 'sample' in args.mode:
         policy = lambda *args: agent.policy(*args, mode="sample")
+    elif 'filter' in args.mode:
+        policy = lambda *args: agent.policy(*args, mode="filter")
     else:
         policy = lambda *args: agent.policy(*args, mode="eval")
 
@@ -191,7 +193,7 @@ def main(argv=None):
             "run.log_keys_sum": "(travel_distance|destination_reached|out_of_lane|time_exceeded|is_collision|timesteps)",
             "run.log_keys_mean": "(travel_distance|ttc|speed_norm|wpt_dis)",
             "run.log_keys_max": "(travel_distance|ttc|speed_norm|wpt_dis)",
-            "run.steps": 3000,#15000,
+            "run.steps": 15000,
         }
     )
 

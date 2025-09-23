@@ -1,6 +1,7 @@
 import jax
 import numpy as np
 import jax.numpy as jnp
+import jax.nn as jnn
 import random as py_rand
 from jax import random
 tree_map = jax.tree_util.tree_map
@@ -222,7 +223,9 @@ class Agent(nj.Module):
                 gradients = surprise_grad_fn(obs)
 
                 def tanh(gradients):
-                    normalized = jnp.tanh(gradients / 15)
+                    normalized = (gradients - gradients.min()) / (gradients.max() - gradients.min() + 1e-8)
+                    # normalized = jnn.sigmoid(gradients - 0.5)
+                    normalized = 2.0 * jnp.power(normalized - 0.5, 3.0) + 0.5
                     mean = jnp.mean(gradients)
                     return normalized, mean
 
@@ -268,7 +271,90 @@ class Agent(nj.Module):
                 #     lambda stacked: stacked[min_idx],
                 #     stacked_latents
                 # )
+            
+            elif 'filter' in mode:
+                # Smart gradient-based dropout instead of brute force search
+                surprises = []
+                total_newlat_seperate = []
+                # First, get baseline surprise with original observation
+                base_surprise = self.wm.rssm.get_dist(latent).kl_divergence(self.wm.rssm.get_dist(prior_orig))
                 
+                # Smart dropout function integrated into your existing structure
+                def compute_surprise_for_obs(obs_input):
+                    """Compute surprise for given observation - used for gradient computation"""
+                    embed = self.wm.encoder(obs_input)
+                    temp_latent, temp_prior = self.wm.rssm.obs_step(
+                        prev_latent, prev_action, embed, obs_input['is_first']
+                    )
+                    surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(
+                        self.wm.rssm.get_dist(temp_prior)
+                    )
+                    return surprise.mean()  # Return scalar for gradient computation
+                
+                def median_blur(image: jnp.ndarray, ksize: int) -> jnp.ndarray:
+                    """
+                    Apply median blur to a batch of images (NHWC format).
+
+                    Args:
+                        image: jnp.ndarray of shape (N, H, W, C)
+                        ksize: odd integer kernel size (e.g. 3, 5, 7)
+
+                    Returns:
+                        Blurred image of same shape as input.
+                    """
+                    assert ksize % 2 == 1, "ksize must be odd"
+                    pad = ksize // 2
+                    N, H, W, C = image.shape
+
+                    # Pad with reflect to mimic OpenCV behavior
+                    padded = jnp.pad(
+                        image, ((0, 0), (pad, pad), (pad, pad), (0, 0)), mode="reflect"
+                    )
+
+                    # Extract patches using dynamic slicing
+                    def get_patch(n, i, j):
+                        return jax.lax.dynamic_slice(
+                            padded, (n, i, j, 0), (1, ksize, ksize, C)
+                        ).reshape(-1, C)
+
+                    # Meshgrid over image coords
+                    ii, jj = jnp.meshgrid(jnp.arange(H), jnp.arange(W), indexing="ij")
+
+                    # Vectorize over batch, height, width
+                    patches = jax.vmap(
+                        lambda n: jax.vmap(
+                            lambda i_row, j_row: jax.vmap(
+                                get_patch, in_axes=(None, 0, 0)
+                            )(n, i_row, j_row),
+                            in_axes=(0, 0),
+                        )(ii, jj),
+                        in_axes=(0,),
+                    )(jnp.arange(N))  # (N, H, W, ksize*ksize, C)
+
+                    # Take median across neighborhood axis
+                    result = jnp.median(patches, axis=3)  # (N, H, W, C)
+                    return result
+                # Compute gradients to find harmful pixels
+                surprise_grad_fn = jax.grad(compute_surprise_for_obs)
+                #Check
+                
+                # Get image key
+                image_key = self.wm.config.encoder.cnn_keys#[0]
+                
+
+                sampled_obs = jax.tree_map(lambda x: x, obs)
+                sampled_obs[image_key] = median_blur(sampled_obs[image_key],ksize=3)
+                embed = self.wm.encoder(sampled_obs)
+                temp_latent, temp_prior_orig = self.wm.rssm.obs_step(
+                    prev_latent, prev_action, embed, obs['is_first']
+                )
+                latent = temp_latent
+                
+                # # Select the latent with lowest surprise
+                # latent = jax.tree_map(
+                #     lambda stacked: stacked[min_idx],
+                #     stacked_latents
+                # )
 
             elif 'sample_v0' in mode:
                 # Smart gradient-based dropout instead of brute force search

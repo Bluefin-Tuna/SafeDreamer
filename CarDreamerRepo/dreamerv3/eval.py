@@ -95,11 +95,12 @@ def eval_only(agent, env, logger, args):
                 stats[f"policy_{key}"] = ep[key]
 
         def log(key, value):
-            print(key)
             if key == 'log_surprise_mean':
                 stats['log_surprise_mean'] = value[10] # Set value index to wanted.
             if key == 'mu_gradients':
                 stats["mu_gradients"] = value
+            if key =='gradients_exact':
+                stats["gradients_exact"] = value
             if re.match(args.log_keys_sum, key):
                 stats[f"sum_{key}"] = value.sum()
             if re.match(args.log_keys_mean, key):
@@ -148,6 +149,8 @@ def eval_only(agent, env, logger, args):
         policy = lambda *args: agent.policy(*args, mode="sample")
     elif 'filter' in args.mode:
         policy = lambda *args: agent.policy(*args, mode="filter")
+    elif 'reject' in args.mode:
+        policy = lambda *args: agent.policy(*args, mode="reject")
     else:
         policy = lambda *args: agent.policy(*args, mode="eval")
 

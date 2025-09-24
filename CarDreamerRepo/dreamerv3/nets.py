@@ -121,6 +121,26 @@ class RSSM(nj.Module):
         stoch = dist.sample(seed=nj.rng())
         post = {"stoch": stoch, "deter": prior["deter"], **stats}
         return cast(post), cast(prior)
+    
+    def obs_step_dropped_residual(self, prev_state, prev_action, embed, is_first):
+        is_first = cast(is_first)
+        prev_action = cast(prev_action)
+        if self._action_clip > 0.0:
+            prev_action *= sg(self._action_clip / jnp.maximum(self._action_clip, jnp.abs(prev_action)))
+        prev_state, prev_action = jax.tree_util.tree_map(lambda x: self._mask(x, 1.0 - is_first), (prev_state, prev_action))
+        prev_state = jax.tree_util.tree_map(
+            lambda x, y: x + self._mask(y, is_first),
+            prev_state,
+            self.initial(len(is_first)),
+        )
+        prior = self.img_step(prev_state, prev_action)
+        x = jnp.concatenate([prior["deter"]*0, embed], -1)
+        x = self.get("obs_out", Linear, **self._kw)(x)
+        stats = self._stats("obs_stats", x)
+        dist = self.get_dist(stats)
+        stoch = dist.sample(seed=nj.rng())
+        post = {"stoch": stoch, "deter": prior["deter"], **stats}
+        return cast(post), cast(prior)
 
     def img_step(self, prev_state, prev_action):
         prev_stoch = prev_state["stoch"]

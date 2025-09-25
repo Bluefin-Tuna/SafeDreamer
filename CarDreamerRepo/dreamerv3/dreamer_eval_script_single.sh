@@ -48,11 +48,11 @@ declare -A BASE_CHECKPOINTS_PIXEL=(
 # )
 
 # Scenarios
-SCENARIOS=("carla_four_lane" "carla_right_turn_simple" "carla_stop_sign")
-AUG_TYPES=("jitter" "glare" "gaussian" "occlusion")
+SCENARIOS=("carla_four_lane")
+AUG_TYPES=("gaussian")
 # AUG_LEVELS=(0.1 0.010)
 # AUG_LEVELS=($(seq 0.000 0.005 0.100))
-PROPORTION_LEVELS=(0.75 0.875)
+PROPORTION_LEVELS=(0.75)
 
 AUG_LEVELS=(1.0)
 

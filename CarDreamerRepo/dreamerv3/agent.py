@@ -295,20 +295,20 @@ class Agent(nj.Module):
                 base_surprise = self.wm.rssm.get_dist(latent).kl_divergence(self.wm.rssm.get_dist(prior_orig))
                 
                 
-                # # Smart dropout function integrated into your existing structure
-                # def compute_surprise_for_obs(obs_input):
-                #     """Compute surprise for given observation - used for gradient computation"""
-                #     embed = self.wm.encoder(obs_input)
-                #     temp_latent, temp_prior = self.wm.rssm.obs_step(
-                #         prev_latent, prev_action, embed, obs_input['is_first']
-                #     )
-                #     surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(
-                #         self.wm.rssm.get_dist(temp_prior)
-                #     )
-                #     return surprise.mean()  # Return scalar for gradient computation
+                # Smart dropout function integrated into your existing structure
+                def compute_surprise_for_obs(obs_input):
+                    """Compute surprise for given observation - used for gradient computation"""
+                    embed = self.wm.encoder(obs_input)
+                    temp_latent, temp_prior = self.wm.rssm.obs_step(
+                        prev_latent, prev_action, embed, obs_input['is_first']
+                    )
+                    surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(
+                        self.wm.rssm.get_dist(temp_prior)
+                    )
+                    return surprise.mean()  # Return scalar for gradient computation
                 
                 # Compute gradients to find harmful pixels
-                # surprise_grad_fn = jax.grad(compute_surprise_for_obs)
+                surprise_grad_fn = jax.grad(compute_surprise_for_obs)
                 #Check
                 
                 # Get image key
@@ -329,22 +329,32 @@ class Agent(nj.Module):
                 )
                 truth, reconstruct_post, reconstruct_post_dropped = self.get_recon_imgs(obs, dropped_residual_latent, latent, image_key)
 
-                # normalized_gradients, mean_gradients = tanh(jnp.abs(gradients[image_key]))
-                #Do we take the latent or the dropped latent.
-                # if stage == 0:
-                #     latent, stage = jax.lax.cond(
-                #         jnp.mean(jnp.abs(obs[image_key] - reconstruct_post_dropped)) < 1,
-                #         lambda: (latent, 0),
-                #         lambda: (prior_orig, 1) 
-                #     )
-                # elif stage == 1:
-                #     latent, stage = jax.lax.cond(
-                #         jnp.mean(jnp.abs(obs[image_key] - reconstruct_post_dropped)) < 1,
-                #         lambda: (dropped_residual_latent, 0),
-                #         lambda: (prior_orig, 1)
-                #     )
+                gradients = surprise_grad_fn(obs)
 
-                condition = jnp.mean(jnp.abs(obs[image_key] - reconstruct_post_dropped)) < .1
+                def tanh(gradients):
+                    normalized = (gradients - gradients.min()) / (gradients.max() - gradients.min() + 1e-8)
+                    # normalized = jnn.sigmoid(gradients - 0.5)
+                    normalized = 2.0 * jnp.power(normalized - 0.5, 3.0) + 0.5
+                    mean = jnp.max(gradients)
+                    return normalized, mean
+                
+                def sigmoid(gradients):
+                    
+                    normalized = jnn.sigmoid(gradients)
+                    # normalized = 2.0 * jnp.power(nor - 0.5, 3.0) + 0.5
+                    mean = jnp.mean(gradients)
+                    return normalized, mean
+
+                normalized_gradients, mean_gradients = tanh(jnp.abs(gradients[image_key]))
+
+                _, prior_img, _ = self.get_recon_imgs(obs, latent, prior_orig, image_key)
+
+                sampled_obs = jax.tree_map(lambda x: x, obs)
+                interpolated_img = (1 - normalized_gradients) * obs[image_key] + normalized_gradients * prior_img
+                sampled_obs[image_key] = interpolated_img
+                interpolated_img = jnp.array(interpolated_img)
+
+                condition = jnp.mean(jnp.abs(interpolated_img - reconstruct_post_dropped)) < .1
 
                 latent, stage = jax.lax.cond(
                     stage == jnp.array(0),
@@ -363,6 +373,7 @@ class Agent(nj.Module):
                 )
 
                 _, prior_img, interpolated_img = self.get_recon_imgs(obs, latent, prior_orig, image_key)
+
 
                 # interpolated_img = (1 - normalized_gradients) * obs[image_key] + normalized_gradients * prior_img
 

@@ -52,7 +52,12 @@ class Agent(nj.Module):
         reconstruct_post = self.wm.heads['decoder'](posterior)[key].mode()
         truth = obs[key]
         
-        return truth, reconstruct_prior, reconstruct_post
+        return truth,  reconstruct_post, reconstruct_prior
+    
+    def get_single_recon(self, latent, key='birdeye_wpt'):
+        reconstruct = self.wm.heads['decoder'](latent)[key].mode()
+        return reconstruct
+
 
     def policy(self, obs, state, mode="train"):
 
@@ -64,6 +69,7 @@ class Agent(nj.Module):
         else:
             (prev_latent, prev_action), task_state, expl_state = state
             stage = jnp.array(0) # or some default value
+
         embed = self.wm.encoder(obs)
         latent, prior_orig = self.wm.rssm.obs_step(prev_latent, prev_action, embed, obs["is_first"])
         if mode not in ['train', 'eval', 'explore']:
@@ -222,7 +228,7 @@ class Agent(nj.Module):
                 # Try different dropout ratios, but use smart selection
                 # target_dropout_ratios = np.linspace(0.65, 1, 50)  # Fewer samples, smarter selection
 
-                truth, prior_img, reconstruct_post = self.get_recon_imgs(obs, latent, prior_orig, image_key)
+                truth, reconstruct_post, prior_img = self.get_recon_imgs(obs, latent, prior_orig, image_key)
 
                 gradients = surprise_grad_fn(obs)
 
@@ -293,9 +299,9 @@ class Agent(nj.Module):
                 total_newlat_seperate = []
                 # First, get baseline surprise with original observation
                 base_surprise = self.wm.rssm.get_dist(latent).kl_divergence(self.wm.rssm.get_dist(prior_orig))
-                
-                
-                # Smart dropout function integrated into your existing structure
+
+                # Get image key
+                image_key = self.wm.config.encoder.cnn_keys#[0]
                 def compute_surprise_for_obs(obs_input):
                     """Compute surprise for given observation - used for gradient computation"""
                     embed = self.wm.encoder(obs_input)
@@ -306,30 +312,6 @@ class Agent(nj.Module):
                         self.wm.rssm.get_dist(temp_prior)
                     )
                     return surprise.mean()  # Return scalar for gradient computation
-                
-                # Compute gradients to find harmful pixels
-                surprise_grad_fn = jax.grad(compute_surprise_for_obs)
-                #Check
-                
-                # Get image key
-                image_key = self.wm.config.encoder.cnn_keys#[0]
-                
-                # 0. Sample from the prior to get some image of the prior | Done
-                # 1. Compute surprise gradients | Done
-                # 2. Apply the modified tanh function to the surprise gradients
-                # 3. (1 - surpise_gradients) * obs_input + surprise_gradients * prior_orig
-
-                # Try different dropout ratios, but use smart selection
-                # target_dropout_ratios = np.linspace(0.65, 1, 50)  # Fewer samples, smarter selection
-                batch_size = 1  # or however you determine batch size
-                is_first = jnp.ones((batch_size,), dtype=jnp.float32)
-
-                dropped_residual_latent, dropped_prior_orig = self.wm.rssm.obs_step(
-                    prev_latent, prev_action, embed, is_first
-                )
-                truth, reconstruct_post, reconstruct_post_dropped = self.get_recon_imgs(obs, dropped_residual_latent, latent, image_key)
-
-                gradients = surprise_grad_fn(obs)
 
                 def tanh(gradients):
                     normalized = (gradients - gradients.min()) / (gradients.max() - gradients.min() + 1e-8)
@@ -338,89 +320,123 @@ class Agent(nj.Module):
                     mean = jnp.max(gradients)
                     return normalized, mean
                 
-                def sigmoid(gradients):
-                    
+                def activation_experimental(gradients):
                     normalized = jnn.sigmoid(gradients)
                     # normalized = 2.0 * jnp.power(nor - 0.5, 3.0) + 0.5
                     mean = jnp.mean(gradients)
                     return normalized, mean
+                surprise_grad_fn = jax.grad(compute_surprise_for_obs)
+                gradients = surprise_grad_fn(obs)
+                normalized_gradients, mean_gradients = activation_experimental(jnp.abs(gradients[image_key]))
+                # Try different dropout ratios, but use smart selection
+                # target_dropout_ratios = np.linspace(0.65, 1, 50)  # Fewer samples, smarter selection
+                batch_size = 1  # or however you determine batch size
+                is_first = jnp.ones((batch_size,), dtype=jnp.float32)
+                
+                #P(z|x,h_0)
+                dropped_residual_latent, dropped_prior_orig = self.wm.rssm.obs_step(
+                    prev_latent, prev_action, embed, is_first
+                )
+                #X_po = E[P(x|z_t,h_0)] where z_t ~ P(z|x,h_0)
+                truth, reconstruct_post_dropped, reconstruct_post = self.get_recon_imgs(obs, dropped_residual_latent, latent, image_key)
 
-                normalized_gradients, mean_gradients = tanh(jnp.abs(gradients[image_key]))
+                #Check if the image looks clean
+                #||X_t - X_po||
+                condition = jnp.mean(jnp.abs(obs[image_key] - reconstruct_post_dropped)) < .1
 
-                _, prior_img, _ = self.get_recon_imgs(obs, latent, prior_orig, image_key)
 
+                prior_img = self.get_single_recon(prior_orig, image_key)
                 sampled_obs = jax.tree_map(lambda x: x, obs)
-                interpolated_img = (1 - normalized_gradients) * obs[image_key] + normalized_gradients * prior_img
+                interpolation = (1 - normalized_gradients) * obs[image_key] + normalized_gradients * prior_img
+                
+                interpolated_img = jax.lax.cond(
+                    stage == jnp.array(0),
+                    lambda: interpolation,
+                    lambda: reconstruct_post #reconstruct_post_dropped
+                )
                 sampled_obs[image_key] = interpolated_img
                 interpolated_img = jnp.array(interpolated_img)
 
-                condition = jnp.mean(jnp.abs(interpolated_img - reconstruct_post_dropped)) < .1
+                embed = self.wm.encoder(sampled_obs)
+                interpolated_img_post_dropped, temp_prior_orig_dropped = self.wm.rssm.obs_step(
+                    prev_latent, prev_action, embed, is_first
+                )
+                
+                recon_interpolated_img_dropped = self.get_single_recon(interpolated_img_post_dropped,image_key)
 
-                latent, stage = jax.lax.cond(
+                interpolated_img_post, temp_prior_orig = self.wm.rssm.obs_step(
+                    prev_latent, prev_action, embed, obs['is_first']
+                )
+                recon_interpolated_img = self.get_single_recon(interpolated_img_post,image_key)
+                # surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(
+                #         self.wm.rssm.get_dist(temp_prior)
+                #     )
+
+                #M(\bar{X})
+                condition_2 = jnp.mean(jnp.abs(interpolated_img - recon_interpolated_img_dropped)) < .05
+
+                #Does h_t align with x_bar?
+                condition_3 = jnp.mean(jnp.abs(interpolated_img - recon_interpolated_img)) < .05
+                
+                # latent, action_latent, stage = jax.lax.cond(
+                #     stage == jnp.array(0),
+                #     # When stage == 0
+                #     lambda: jax.lax.cond(
+                #         condition, #If truth is good keep using.
+                #         lambda: (latent, latent, jnp.array(0)),
+                #         lambda: jax.lax.cond(
+                #             (condition_3 and condition_2), #Does h_t align with x_bar? Can we at least use x_bar? (Note: Can x_bar go into residual?)
+                #             (interpolated_img_post, interpolated_img_post, jnp.array(1))), # (prior_orig, interpolated_img_post, jnp.array(1))),
+                #             (prior_orig, prior_orig, jnp.array(1)))
+                #     ,
+                #     # When stage != 0 (assuming stage == 1)
+                #     lambda: jax.lax.cond(
+                #         condition, #Can we recover to x_t
+                #         lambda: (dropped_residual_latent, dropped_residual_latent, jnp.array(0)),
+                #         lambda: jax.lax.cond(
+                #             (condition_3 and condition_2), #Does h_t still align with x_bar?
+                #             (interpolated_img_post, interpolated_img_post, jnp.array(1)),# (prior_orig, interpolated_img_post, jnp.array(1)),
+                #             lambda: jax.lax.cond( # h_t and x_bar are different, can we recover to x_bar?
+                #                 condition_2,
+                #                 (interpolated_img_post_dropped, interpolated_img_post_dropped, jnp.array(1)),
+                #                 (prior_orig, prior_orig, jnp.array(1))
+                #             )
+                            
+                #         )
+                #     )
+                # )
+                latent, action_latent, stage = jax.lax.cond(
                     stage == jnp.array(0),
                     # When stage == 0
                     lambda: jax.lax.cond(
-                        condition,
-                        lambda: (latent, jnp.array(0)),
-                        lambda: (prior_orig, jnp.array(1))
+                        condition,  # If truth is good keep using.
+                        lambda: (latent, latent, jnp.array(0)),
+                        lambda: jax.lax.cond(
+                            jnp.logical_and(condition_3, condition_2),  # Does h_t align with x_bar? Can we at least use x_bar?
+                            lambda: (interpolated_img_post, interpolated_img_post, jnp.array(1)), #(prior_orig, interpolated_img_post, jnp.array(1)),
+                            lambda: (prior_orig, prior_orig, jnp.array(1))
+                        )
                     ),
                     # When stage != 0 (assuming stage == 1)
                     lambda: jax.lax.cond(
-                        condition,
-                        lambda: (dropped_residual_latent, jnp.array(0)),
-                        lambda: (prior_orig, jnp.array(1))
+                        condition,  # Can we recover to x_t
+                        lambda: (dropped_residual_latent, dropped_residual_latent, jnp.array(0)),
+                        lambda: jax.lax.cond(
+                            jnp.logical_and(condition_3, condition_2),  # Does h_t still align with x_bar?
+                            lambda: (interpolated_img_post, interpolated_img_post, jnp.array(1)),
+                            lambda: jax.lax.cond(  # h_t and x_bar are different, can we recover to x_bar?
+                                condition_2,
+                                lambda: (interpolated_img_post_dropped, interpolated_img_post_dropped, jnp.array(1)),
+                                lambda: (prior_orig, prior_orig, jnp.array(1))
+                            )
+                        )
                     )
                 )
 
-                _, prior_img, interpolated_img = self.get_recon_imgs(obs, latent, prior_orig, image_key)
-
-
-                # interpolated_img = (1 - normalized_gradients) * obs[image_key] + normalized_gradients * prior_img
-
-                # sampled_obs[image_key] = interpolated_img
-                # interpolated_img = jnp.array(interpolated_img)
-
+                
+        
                 video = jnp.concatenate([truth, prior_img, reconstruct_post, reconstruct_post_dropped, interpolated_img], axis=2)
                 
-
-                # # Compute latent and surprise for this dropout configuration
-                # embed = self.wm.encoder(sampled_obs)
-                # temp_latent, temp_prior_orig = self.wm.rssm.obs_step(
-                #     prev_latent, prev_action, embed, obs['is_first']
-                # )
-                # surprise = self.wm.rssm.get_dist(temp_latent).kl_divergence(
-                #     self.wm.rssm.get_dist(temp_prior_orig)
-                # )
-                    
-                # surprises.append(surprise)
-                # total_newlat_seperate.append(temp_latent)
- 
-                # # Add original observation (no dropout) as final candidate
-                # total_newlat_seperate.append(latent)
-                # surprises.append(base_surprise)
-                
-                # # Select best configuration
-                # surprises = jnp.array(surprises)
-                # min_idx = jnp.argmin(surprises)
-                
-                # # Stack candidates and select using advanced indexing
-                # stacked_latents = jax.tree_map(
-                #     lambda *candidates: jnp.stack(candidates, axis=0),
-                #     *total_newlat_seperate
-                # )
-                
-                # latent = temp_latent
-                # self.wm.surprise_mean = jax.lax.cond(
-                #     obs['is_first'],
-                #     lambda: 0,
-                #     lambda: base_surprise 
-                # )
-                # self.wm.surprise_mean = base_surprise
-                # # Select the latent with lowest surprise
-                # latent = jax.tree_map(
-                #     lambda stacked: stacked[min_idx],
-                #     stacked_latents
-                # )
             
             elif 'filter' in mode:
                 # Smart gradient-based dropout instead of brute force search
@@ -658,11 +674,16 @@ class Agent(nj.Module):
                 #     operand=None  # pass None because lambdas expect one argument
                 # )
                     
+        if mode == 'reject':
+            self.expl_behavior.policy(action_latent, expl_state)
+            task_outs, task_state = self.task_behavior.policy(action_latent, task_state)
+            expl_outs, expl_state = self.expl_behavior.policy(action_latent, expl_state)
+            
+        else:
+            self.expl_behavior.policy(latent, expl_state)
+            task_outs, task_state = self.task_behavior.policy(latent, task_state)
+            expl_outs, expl_state = self.expl_behavior.policy(latent, expl_state)
 
-        self.expl_behavior.policy(latent, expl_state)
-        task_outs, task_state = self.task_behavior.policy(latent, task_state)
-        expl_outs, expl_state = self.expl_behavior.policy(latent, expl_state)
-        
         def reshape_outputs(surprises_dict):
             reshaped = {}
             for k, v in surprises_dict.items():
@@ -683,7 +704,7 @@ class Agent(nj.Module):
                 self.wm.rssm.get_dist(prior)
             )
             image_key = 'birdeye_wpt'
-            truth, prior_img, reconstruct_post = self.get_recon_imgs(obs, latent, prior_orig, image_key)
+            truth, reconstruct_post, prior_img  = self.get_recon_imgs(obs, latent, prior_orig, image_key)
             video = jnp.concatenate([truth, prior_img, reconstruct_post], axis=2)
             video = jnp.expand_dims(video, 0)
             # metrics = {}

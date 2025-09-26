@@ -67,12 +67,14 @@ for subdir in subdirs:
             group = "filter"
         elif "reject" in subdir.lower():
             group = 'reject'
+        elif "rejv0" in subdir.lower():
+            group = 'rejv0'
         else:
             group = "other"
         results[scenario][task][group] = (mean, std)
 
 # Plot: one subplot per scenario
-groups = ["sample", "filter", "other", "reject"]
+groups = ["sample", "filter", "other", "reject", "rejv0"]
 fig, axes = plt.subplots(1, len(SCENARIOS), figsize=(16, 5), sharey=False)
 
 for ax, (scenario, tasks_dict) in zip(axes, results.items()):
@@ -93,4 +95,4 @@ for ax, (scenario, tasks_dict) in zip(axes, results.items()):
 fig.suptitle("Sample vs Filter vs Other by Scenario", fontsize=14)
 fig.legend(groups, loc="upper right")
 plt.tight_layout()
-plt.show()
+plt.savefig('/home/general/Documents/work/Trolls/SafeRL/CarDreamer/CarDreamer/CarDreamerRepo/logdir/plots/folder_results.png')

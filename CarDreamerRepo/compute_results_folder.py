@@ -74,7 +74,7 @@ for subdir in subdirs:
         results[scenario][task][group] = (mean, std)
 
 # Plot: one subplot per scenario
-groups = ["sample", "other", "reject", "rejv0"]
+groups = ["other", "reject", "rejv0"]
 fig, axes = plt.subplots(1, len(SCENARIOS), figsize=(16, 5), sharey=False)
 
 for ax, (scenario, tasks_dict) in zip(axes, results.items()):

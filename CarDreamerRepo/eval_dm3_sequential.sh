@@ -51,6 +51,7 @@ cleanup() {
 trap cleanup EXIT
 
 log_with_timestamp "Starting eval..."
+log_with_timestamp "Log file at ~/Documents/work/Trolls/SafeRL/CarDreamer/CarDreamer/CarDreamerRepo/$LOG_FILE"
 launch_carla
 sleep 5
 

@@ -64,11 +64,14 @@ class Agent(nj.Module):
         self.config.jax.jit and print("Tracing policy function.")
         obs = self.preprocess(obs)
         # (prev_latent, prev_action), task_state, expl_state, stage = state
-        if len(state) == 4:
-            (prev_latent, prev_action), task_state, expl_state, stage = state
+        if len(state) == 5:
+            (prev_latent, prev_action), task_state, expl_state, stage, step = state
+            step+=1
         else:
             (prev_latent, prev_action), task_state, expl_state = state
             stage = jnp.array(0) # or some default value
+            step = 0
+            print(step)
 
         embed = self.wm.encoder(obs)
         latent, prior_orig = self.wm.rssm.obs_step(prev_latent, prev_action, embed, obs["is_first"])
@@ -314,20 +317,22 @@ class Agent(nj.Module):
                     return surprise.mean()  # Return scalar for gradient computation
 
                 def tanh(gradients):
-                    normalized = (gradients - gradients.min()) / (gradients.max() - gradients.min() + 1e-8)
+                    # normalized = (gradients - gradients.min()) / (gradients.max() - gradients.min() + 1e-8)
                     # normalized = jnn.sigmoid(gradients - 0.5)
-                    normalized = 2.0 * jnp.power(normalized - 0.5, 3.0) + 0.5
+                    normalized = 2.0 * jnp.power(gradients - 0.5, 3.0) + 0.5
                     mean = jnp.max(gradients)
                     return normalized, mean
                 
                 def activation_experimental(gradients):
-                    normalized = jnn.sigmoid(gradients)
+                    # normalized = (gradients - gradients.min()) / (gradients.max() - gradients.min() + 1e-8)
+                    normalized = jnn.sigmoid(gradients - 0.5)
                     # normalized = 2.0 * jnp.power(nor - 0.5, 3.0) + 0.5
                     mean = jnp.mean(gradients)
                     return normalized, mean
+                
                 surprise_grad_fn = jax.grad(compute_surprise_for_obs)
                 gradients = surprise_grad_fn(obs)
-                normalized_gradients, mean_gradients = activation_experimental(jnp.abs(gradients[image_key]))
+                normalized_gradients, mean_gradients = tanh(jnp.abs(gradients[image_key]))
                 # Try different dropout ratios, but use smart selection
                 # target_dropout_ratios = np.linspace(0.65, 1, 50)  # Fewer samples, smarter selection
                 batch_size = 1  # or however you determine batch size
@@ -342,7 +347,9 @@ class Agent(nj.Module):
 
                 #Check if the image looks clean
                 #||X_t - X_po||
-                condition = jnp.mean(jnp.abs(obs[image_key] - reconstruct_post_dropped)) < .1
+                tau = 0.025
+                recon_score = jnp.mean(jnp.abs(obs[image_key] - reconstruct_post_dropped))
+                condition = recon_score < tau
 
 
                 prior_img = self.get_single_recon(prior_orig, image_key)
@@ -352,7 +359,7 @@ class Agent(nj.Module):
                 interpolated_img = jax.lax.cond(
                     stage == jnp.array(0),
                     lambda: interpolation,
-                    lambda: reconstruct_post #reconstruct_post_dropped
+                    lambda: reconstruct_post
                 )
                 sampled_obs[image_key] = interpolated_img
                 interpolated_img = jnp.array(interpolated_img)
@@ -373,10 +380,14 @@ class Agent(nj.Module):
                 #     )
 
                 #M(\bar{X})
-                condition_2 = jnp.mean(jnp.abs(interpolated_img - recon_interpolated_img_dropped)) < .05
+                recon_score_2 = jnp.mean(jnp.abs(interpolated_img - recon_interpolated_img_dropped))
+                condition_2 = recon_score_2 < tau
 
                 #Does h_t align with x_bar?
-                condition_3 = jnp.mean(jnp.abs(interpolated_img - recon_interpolated_img)) < .05
+                recon_score_3 = jnp.mean(jnp.abs(interpolated_img - recon_interpolated_img))
+                condition_3 = recon_score_3 < tau
+
+                # condition_4 = jnp.mean(jnp.abs(recon_interpolated_img_dropped - recon_interpolated_img)) <.05
                 
                 # latent, action_latent, stage = jax.lax.cond(
                 #     stage == jnp.array(0),
@@ -414,7 +425,7 @@ class Agent(nj.Module):
                         lambda: jax.lax.cond(
                             jnp.logical_and(condition_3, condition_2),  # Does h_t align with x_bar? Can we at least use x_bar?
                             lambda: (interpolated_img_post, interpolated_img_post, jnp.array(1)), #(prior_orig, interpolated_img_post, jnp.array(1)),
-                            lambda: (prior_orig, prior_orig, jnp.array(1))
+                            lambda: (prior_orig, prior_orig, jnp.array(2))
                         )
                     ),
                     # When stage != 0 (assuming stage == 1)
@@ -423,11 +434,11 @@ class Agent(nj.Module):
                         lambda: (dropped_residual_latent, dropped_residual_latent, jnp.array(0)),
                         lambda: jax.lax.cond(
                             jnp.logical_and(condition_3, condition_2),  # Does h_t still align with x_bar?
-                            lambda: (interpolated_img_post, interpolated_img_post, jnp.array(1)),
+                            lambda: (interpolated_img_post, interpolated_img_post, jnp.array(3)),
                             lambda: jax.lax.cond(  # h_t and x_bar are different, can we recover to x_bar?
                                 condition_2,
-                                lambda: (interpolated_img_post_dropped, interpolated_img_post_dropped, jnp.array(1)),
-                                lambda: (prior_orig, prior_orig, jnp.array(1))
+                                lambda: (interpolated_img_post_dropped, interpolated_img_post_dropped, jnp.array(4)),
+                                lambda: (prior_orig, prior_orig, jnp.array(5))
                             )
                         )
                     )
@@ -711,6 +722,7 @@ class Agent(nj.Module):
             # outs.update({f"openl_{key}" : jaxutils.video_grid(video)})
             # outs.update(jaxutils.tensorstats(surprise(latent, prior_orig), "log_surprise"))
             # print(outs)
+
             outs = reshape_outputs(outs)
             print({k: v.shape for k, v in outs.items()})
 
@@ -734,11 +746,17 @@ class Agent(nj.Module):
                 outs.update({f"openl_custom_{image_key}" : jaxutils.video_grid(video)})
                 # outs.update({"mu_gradients": mean_gradients})
                 # outs.update({"gradients_exact":gradients[image_key]})
+                print(stage, recon_score, recon_score_2, recon_score_3)
+                outs.update({f"stages":jnp.reshape(stage, (1,))})
+                outs.update({f"condition_1":jnp.reshape(recon_score, (1,))})
+                outs.update({f"condition_2":jnp.reshape(recon_score_2, (1,))})
+                outs.update({f"condition_3":jnp.reshape(recon_score_3, (1,))})
+
 
             outs["action"] = outs["action"].sample(seed=nj.rng())
             outs["log_entropy"] = jnp.zeros(outs["action"].shape[:1])
 
-        state = ((latent, outs["action"]), task_state, expl_state, stage)
+        state = ((latent, outs["action"]), task_state, expl_state, stage, step)
         return outs, state
 
     def train(self, data, state):

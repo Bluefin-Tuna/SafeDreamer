@@ -217,7 +217,6 @@ class TensorBoardOutput(AsyncOutput):
             print("GIF summaries require ffmpeg in $PATH.", e)
             tf.summary.image(name, video, step)
 
-
 class WandBOutput:
     def __init__(self, run_name, config, pattern=r".*", resume=False):
         self._pattern = re.compile(pattern)
@@ -239,6 +238,9 @@ class WandBOutput:
             if len(value.shape) == 0 and self._pattern.search(name):
                 bystep[step][name] = float(value)
             elif len(value.shape) == 1:
+                if 'stage' in name or 'condition' in name:
+                    print(name, value)
+                    continue
                 bystep[step][name] = wandb.Histogram(value)
             elif len(value.shape) == 2:
                 value = np.clip(255 * value, 0, 255).astype(np.uint8)

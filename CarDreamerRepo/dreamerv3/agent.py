@@ -325,7 +325,8 @@ class Agent(nj.Module):
                 
                 def activation_experimental(gradients):
                     # normalized = (gradients - gradients.min()) / (gradients.max() - gradients.min() + 1e-8)
-                    normalized = jnn.sigmoid(gradients - 0.5)
+                    # normalized = jnn.sigmoid(gradients - 0.5)
+                    normalized = jnn.sigmoid(gradients + 1)
                     # normalized = 2.0 * jnp.power(nor - 0.5, 3.0) + 0.5
                     mean = jnp.mean(gradients)
                     return normalized, mean
@@ -347,14 +348,14 @@ class Agent(nj.Module):
 
                 #Check if the image looks clean
                 #||X_t - X_po||
-                tau = 0.025
+                tau = 0.5#0.025 #Higher tau for gaussian stopsign
                 recon_score = jnp.mean(jnp.abs(obs[image_key] - reconstruct_post_dropped))
                 condition = recon_score < tau
 
 
                 prior_img = self.get_single_recon(prior_orig, image_key)
                 sampled_obs = jax.tree_map(lambda x: x, obs)
-                interpolation = (1 - normalized_gradients) * obs[image_key] + normalized_gradients * prior_img
+                interpolation = reconstruct_post#(1 - normalized_gradients) * obs[image_key] + normalized_gradients * prior_img
                 
                 interpolated_img = jax.lax.cond(
                     stage == jnp.array(0),

@@ -15,7 +15,7 @@ import sys
 import time
 import wandb
 
-wandb.login(key="xxx")
+wandb.login(key="17cf136c31b41699d0b7abe62648964e787fd06c")
 
 warnings.filterwarnings("ignore", ".*truncated to dtype int32.*")
 

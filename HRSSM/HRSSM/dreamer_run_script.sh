@@ -5,28 +5,8 @@
 # bash train_dm3.sh 2000 0 --task carla_four_lane --dreamerv3.logdir ./logdir/carla_four_lane_bev_pixel --dreamerv3.run.steps 270000
 # Example 1: Use default settings to train an agent
  python dreamer.py --logdir ./logdir_safedreamer/SafetyCarGoal1 --task safetygym_SafetyCarGoal1-v0 
-# bash train_dm3.sh 2000 0 --task carla_lane_merge --dreamerv3.logdir ./logdir/carla_lane_merge_bev_proj
 
-# bash eval_dm3.sh 2000 0 ./logdir/carla_four_lane_sensor_6_dropout/checkpoint.ckpt Default carla_four_lane 
-# bash eval_dm3.sh 2000 0 ./logdir/carla_four_lane_sensor_6_dropout/checkpoint.ckpt Default carla_four_lane 
-
-# bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_augment_high/checkpoint.ckpt Default carla_four_lane 
-# bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_right_turn_simple_sensor_6_augment_high/checkpoint.ckpt Default carla_right_turn_simple
-# bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_stop_sign_sensor_6_augment_high/checkpoint.ckpt Default carla_stop_sign_simple
-
-# bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_augment_high/checkpoint.ckpt jitter_1 carla_four_lane
-# bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_augment_high/checkpoint.ckpt jitter_2 carla_four_lane
-# bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_augment_high/checkpoint.ckpt jitter_3 carla_four_lane
-# bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_augment_high/checkpoint.ckpt jitter_4 carla_four_lane
-# bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_augment_high/checkpoint.ckpt jitter_5 carla_four_lane
-# bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_augment_high/checkpoint.ckpt jitter_6 carla_four_lane
-
-# bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_augment_high/checkpoint.ckpt jitter_1 carla_four_lane
-# bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_augment_high/checkpoint.ckpt jitter_2 carla_four_lane
-# bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_augment_high/checkpoint.ckpt jitter_3 carla_four_lane
-# bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_augment_high/checkpoint.ckpt jitter_4 carla_four_lane
-# bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_augment_high/checkpoint.ckpt jitter_5 carla_four_lane
-# bash eval_dm3_sequential.sh 2000 0 ./logdir/carla_four_lane_sensor_6_augment_high/checkpoint.ckpt jitter_6 carla_four_lane
+python dreamer.py --logdir ./logdir_safedreamer/SafetyPointButton1_eval --task safetygym_SafetyPointButton1-v0 --config safetygym --mode gaussian_all
 
 
 

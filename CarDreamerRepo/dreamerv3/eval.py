@@ -1,16 +1,21 @@
 import re
 import warnings
-
+import os
 import embodied
 import numpy as np
 import ruamel.yaml as yaml
 
 import car_dreamer
 import dreamerv3
-import os
+
+
+
 import signal
 import sys
 import time
+import wandb
+
+wandb.login(key="xxx")
 
 warnings.filterwarnings("ignore", ".*truncated to dtype int32.*")
 
@@ -41,7 +46,7 @@ import subprocess
 import re
 
 def get_pids(port):
-    command = f"sudo lsof -i :{port} | awk '{{print $2}}'"
+    command = f"lsof -i :{port} | awk '{{print $2}}'"
     pids = subprocess.check_output(command, shell=True, text=True)  # decode to str
     pids = pids.strip()
     if pids:
@@ -56,12 +61,12 @@ def kill_processes_on_ports(ports):
         pids = set(get_pids(port))
         if pids:
             # Try graceful shutdown first
-            subprocess.run(['sudo', 'kill', '-15'] + list(map(str, pids)))
+            subprocess.run(['kill', '-15'] + list(map(str, pids)))
             time.sleep(2)
             # Force kill if still alive
             remaining = set(get_pids(port))
             if remaining:
-                subprocess.run(['sudo', 'kill', '-9'] + list(map(str, remaining)))
+                subprocess.run(['kill', '-9'] + list(map(str, remaining)))
 
 def eval_only(agent, env, logger, args):
     print("Start evaluation.")
@@ -87,12 +92,12 @@ def eval_only(agent, env, logger, args):
         logger.add({"length": length, "score": score}, prefix="episode")
         print(f"Episode has {length} steps and return {score:.1f}.")
         stats = {}
-        for key in ep:
-            if 'custom' in key:
-                stats[key] = ep[key]
-        for key in args.log_keys_video:
-            if key in ep:
-                stats[f"policy_{key}"] = ep[key]
+        # for key in ep:
+        #     if 'custom' in key:
+        #         stats[key] = ep[key]
+        # for key in args.log_keys_video:
+        #     if key in ep:
+        #         stats[f"policy_{key}"] = ep[key]
         custom_values = ['stages', 'condition_1', 'condition_2', 'condition_3',
                          'gradients_exact', 'mu_gradients']
         def log(key, value):
@@ -165,6 +170,31 @@ def eval_only(agent, env, logger, args):
     logger.write()
     
 
+def get_tau(name, mode):
+    # Extract the number after "reject" in mode
+    match = re.search(r'reject(\d+)', mode)
+    if match:
+        n = int(match.group(1))
+        print(n)
+    else:
+        print('No reject number found...')
+        n = 1  # default if no reject number found
+
+    # Set mean and std based on the environment name
+    if name == 'carla_four_lane':
+        mean = 0.0143
+        std = 0.0094
+    elif name == 'carla_stop_sign':
+        mean = 0.0104
+        std = 0.0039
+    elif name == 'carla_right_turn_simple':
+        mean = 0.0100
+        std = 0.0043
+    else:
+        raise ValueError(f"Unknown environment name: {name}")
+
+    return mean + n * std
+
 
 def main(argv=None):
     model_configs = yaml.YAML(typ="safe").load((embodied.Path(__file__).parent / "dreamerv3.yaml").read())
@@ -196,6 +226,12 @@ def main(argv=None):
     env = from_gym.FromGym(env)
     env = wrap_env(env, dreamerv3_config)
     env = embodied.BatchEnv([env], parallel=False)
+    
+    if 'reject' in dreamerv3_config.run.mode: #Compute tau:
+        tau = get_tau(name, dreamerv3_config.run.mode)
+        dreamerv3_config = dreamerv3_config.update(
+            {"run.reject_tau":tau}
+        )
 
     dreamerv3_config = dreamerv3_config.update(
         {
@@ -205,6 +241,8 @@ def main(argv=None):
             "run.steps": 15000,
         }
     )
+
+
 
     agent = dreamerv3.Agent(env.obs_space, env.act_space, step, dreamerv3_config)
     args = embodied.Config(

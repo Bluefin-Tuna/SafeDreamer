@@ -88,3 +88,9 @@ After running for some episodes, you can visualize the evaluation results using 
 ```bash
 python dreamerv3/eval_stats.py --logdir ./logdir/eval_carla_four_lane
 ```
+
+```
+export SDL_AUDIODRIVER=dummy
+export AUDIODEV=null
+Uninstalling numpy-1.25.2:
+```

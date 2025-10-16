@@ -43,6 +43,7 @@ defaults:
     from_checkpoint: ""
     sync_every: 10
     mode: ''
+    reject_tau: .5
 
   envs:
     {

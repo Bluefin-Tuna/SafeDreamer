@@ -3,7 +3,10 @@ import re
 
 import embodied
 import numpy as np
-from jax import tree_map
+try:
+    from jax.tree_util import tree_map
+except ImportError:  # fallback for older JAX
+    from jax import tree_map
 
 
 def eval_only(agent, env, logger, args):

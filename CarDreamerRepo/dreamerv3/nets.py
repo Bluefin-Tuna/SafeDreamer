@@ -10,7 +10,13 @@ from . import ninjax as nj
 
 f32 = jnp.float32
 tfd = tfp.distributions
-tree_map = jax.tree_util.tree_map
+try:
+    from jax import tree
+    tree_map = tree.map
+except (ImportError, AttributeError):
+    from jax import tree_util
+    tree_map = tree_util.tree_map
+# tree_map = jax.tree_util.tree_map
 
 
 def sg(x):

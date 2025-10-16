@@ -4,7 +4,14 @@ import jax.numpy as jnp
 import jax.nn as jnn
 import random as py_rand
 from jax import random
-tree_map = jax.tree_util.tree_map
+# tree_map = jax.tree_util.tree_map
+try:
+    from jax import tree
+    tree_map = tree.map
+except (ImportError, AttributeError):
+    from jax import tree_util
+    tree_map = tree_util.tree_map
+
 sg = lambda x: tree_map(jax.lax.stop_gradient, x)
 import itertools
 import logging
@@ -145,7 +152,7 @@ class Agent(nj.Module):
                     sorted_indices = jnp.argsort(surprises_init, descending=True)
 
                     #Create N more latents by iteratively masking according to the order of sorted indices:
-                    obs_iter = jax.tree_map(lambda x: x, obs)
+                    obs_iter = tree_map(lambda x: x, obs)
                     for i in range(len(sorted_indices)):
                         idx = sorted_indices[i] # 
                         # Use conditional masking for each key based on sorted order
@@ -348,13 +355,13 @@ class Agent(nj.Module):
 
                 #Check if the image looks clean
                 #||X_t - X_po||
-                tau = 0.5#0.025 #Higher tau for gaussian stopsign
+                tau = self.config.run.reject_tau#0.025 #Higher tau for gaussian stopsign
                 recon_score = jnp.mean(jnp.abs(obs[image_key] - reconstruct_post_dropped))
                 condition = recon_score < tau
 
 
                 prior_img = self.get_single_recon(prior_orig, image_key)
-                sampled_obs = jax.tree_map(lambda x: x, obs)
+                sampled_obs = tree_map(lambda x: x, obs)
                 interpolation = reconstruct_post#(1 - normalized_gradients) * obs[image_key] + normalized_gradients * prior_img
                 
                 interpolated_img = jax.lax.cond(
@@ -520,9 +527,9 @@ class Agent(nj.Module):
                 image_key = self.wm.config.encoder.cnn_keys#[0]
                 
 
-                sampled_obs = jax.tree_map(lambda x: x, obs)
-                sampled_obs[image_key] = median_blur(sampled_obs[image_key],ksize=3)
-                embed = self.wm.encoder(sampled_obs)
+                
+                obs[image_key] = median_blur(obs[image_key],ksize=3)
+                embed = self.wm.encoder(obs)
                 temp_latent, temp_prior_orig = self.wm.rssm.obs_step(
                     prev_latent, prev_action, embed, obs['is_first']
                 )

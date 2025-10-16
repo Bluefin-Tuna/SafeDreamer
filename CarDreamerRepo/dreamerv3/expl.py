@@ -1,7 +1,14 @@
 import jax
 import jax.numpy as jnp
 
-tree_map = jax.tree_util.tree_map
+# tree_map = jax.tree_util.tree_map
+try:
+    from jax import tree
+    tree_map = tree.map
+except (ImportError, AttributeError):
+    from jax import tree_util
+    tree_map = tree_util.tree_map
+    
 sg = lambda x: tree_map(jax.lax.stop_gradient, x)
 
 from . import jaxutils, nets

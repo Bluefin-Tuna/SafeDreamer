@@ -9,7 +9,14 @@ from tensorflow_probability.substrates import jax as tfp
 from . import ninjax as nj
 
 tfd = tfp.distributions
-tree_map = jax.tree_util.tree_map
+# tree_map = jax.tree_util.tree_map
+try:
+    from jax import tree
+    tree_map = tree.map
+except (ImportError, AttributeError):
+    from jax import tree_util
+    tree_map = tree_util.tree_map
+    
 sg = lambda x: tree_map(jax.lax.stop_gradient, x)
 COMPUTE_DTYPE = jnp.float32
 

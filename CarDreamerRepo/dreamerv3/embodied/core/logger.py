@@ -223,6 +223,7 @@ class WandBOutput:
         import wandb
     
         wandb.init(
+            mode="offline",
             name=run_name,
             entity="trolls-gt",
             project="Carla",

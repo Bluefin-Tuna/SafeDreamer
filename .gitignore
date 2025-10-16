@@ -5,9 +5,9 @@ __pycache__/
 
 # Logs
 log/
-CarDreamerRepo/logs/
 logdir/
 logdir_safedreamer/
+CarDreamerRepo/logs/
 
 # WandB logs and artifacts
 CarDreamerRepo/wandb/

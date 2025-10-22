@@ -8,6 +8,7 @@ from gym import spaces
 import random
 from .toolkit import EnvMonitorOpenCV, Observer, WorldManager
 import re
+import cv2
 
 class CarlaBaseEnv(gym.Env):
     def __init__(self, config):
@@ -24,6 +25,8 @@ class CarlaBaseEnv(gym.Env):
 
         # Lag buffer for multi-frame lag simulation
         self._lag_buffer = {}  # {key: [frame1, frame2, ...]}
+        # print('Mode ',self._config.mode)
+        # print('Config: ',self._config)
 
     @abstractmethod
     def on_reset(self) -> None:
@@ -157,6 +160,7 @@ class CarlaBaseEnv(gym.Env):
             **reward_info,
             "action": action,
         }
+        # print(self._config.mode)
         # print('Is eval true?: ',self._config.eval)
         # print('Obs keys: ',self.obs.keys())
         # print('Mode being used: ',self._config.mode)
@@ -287,6 +291,27 @@ class CarlaBaseEnv(gym.Env):
                 lag_steps = np.random.randint(1, max_lag + 1)
                 self.obs[key] = self._lag_buffer[key][-lag_steps].copy()
 
+        def apply_chromatic_aberration(key, noise_intensity):
+            """Simulate lens chromatic aberration by slightly shifting color channels."""
+            img = self.obs[key].astype(np.float32)
+            h, w, _ = img.shape
+
+            max_shift = int(2 + 10 * noise_intensity)  # scale with intensity
+            shift_r = np.random.randint(-max_shift, max_shift + 1, size=2)
+            shift_g = np.random.randint(-max_shift, max_shift + 1, size=2)
+            shift_b = np.random.randint(-max_shift, max_shift + 1, size=2)
+
+            def translate(channel, dx, dy):
+                M = np.float32([[1, 0, dx], [0, 1, dy]])
+                return cv2.warpAffine(channel, M, (w, h), borderMode=cv2.BORDER_REFLECT)
+
+            r = translate(img[:, :, 0], *shift_r)
+            g = translate(img[:, :, 1], *shift_g)
+            b = translate(img[:, :, 2], *shift_b)
+
+            merged = np.stack([r, g, b], axis=2)
+            self.obs[key] = np.clip(merged, 0, 255).astype(np.uint8)
+
 
         # Loop over keys and modes
         # print(self._world._time_step)
@@ -306,3 +331,6 @@ class CarlaBaseEnv(gym.Env):
                     apply_channelswap(key, noise_intensity)
                 if 'lag' in self._config.mode:
                     apply_lag_sensor(key, noise_intensity)
+                if 'chrome' in self._config.mode:
+                    apply_chromatic_aberration(key, noise_intensity)
+

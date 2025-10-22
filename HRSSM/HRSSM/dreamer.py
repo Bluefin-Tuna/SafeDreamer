@@ -283,8 +283,12 @@ def make_env(config, mode):
         import envs.myosuite as myosuite
         env = myosuite.make_env(task, config)
     elif "carla" in suite:
-        print(config)
+        
+        config.env = config.env.update({'mode': config.mode})
+        # print(config.env)
+        
         env, env_config = car_dreamer.create_task(config.task, vars(config)) #What does config consist of.
+        env._config = env._config.update({'mode': config.mode})
         config = vars(config)  
         config.update(env_config)
         config = argparse.Namespace(**config)  # dict → Namespace
@@ -323,6 +327,7 @@ def main(config):
         tools.enable_deterministic_run()
     logdir = pathlib.Path(config.logdir).expanduser()
     print("Logdir", logdir)
+    print('Config:',config)
     logdir.mkdir(parents=True, exist_ok=True)
     with open(os.path.join(logdir, 'config.json'), 'w') as f:
         json.dump(vars(config), f, sort_keys=True, indent=4)
@@ -341,6 +346,7 @@ def main(config):
     logger = tools.SimpleLogger(logdir, config.action_repeat * step) if config.simple_log else tools.FullLogger(logdir, config.videodir, config.action_repeat * step)
 
     print("Create envs.")
+
     train_eps = collections.OrderedDict()
     eval_eps = collections.OrderedDict()
     make = lambda mode: make_env(config, mode)
@@ -397,6 +403,7 @@ def main(config):
     train_dataset = make_dataset(train_eps, config)
     eval_dataset = make_dataset(eval_eps, config)
     print(train_envs[0].obs_space)
+    print('TASK: ', config.task)
     if 'carla' in config.task:
         agent = Dreamer(
             # train_envs[0].observation_space,
@@ -431,6 +438,11 @@ def main(config):
         print("Loading model from", checkpoint_path)
         checkpoint = torch.load(checkpoint_path)  # this is probably just a state_dict
         agent.load_state_dict(checkpoint)         # load it directly
+    if config.checkpoint != '':
+        checkpoint_path = config.checkpoint
+        print("Loading model from", checkpoint_path)
+        checkpoint = torch.load(checkpoint_path)  # this is probably just a state_dict
+        agent.load_state_dict(checkpoint)
 
     # make sure eval will be executed once after config.steps
     test_iters = 0
@@ -518,4 +530,6 @@ if __name__ == "__main__":
     parser.add_argument('--nomlr', action='store_true')
     parser.add_argument('--nosimsr', action='store_true')
     parser.add_argument('--post_mlr', action='store_true')
+    parser.add_argument('--checkpoint',default='',type=str)
+    parser.add_argument('--mode', default='', type=str)
     main(parser.parse_args(remaining))

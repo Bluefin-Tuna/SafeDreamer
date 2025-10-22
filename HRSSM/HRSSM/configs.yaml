@@ -126,6 +126,7 @@ defaults:
     safetygym: {size: [64,64], repeat: 5, render: True, obs_key: 'image', camera_name: 'vision_front_back'}
     world:
       carla_port: 2000
+    mode: ''
 
   wrapper: { length: 0, reset: True, discretize: 0, checks: False }
 
@@ -337,6 +338,7 @@ carla:
   # pretrain: 10 #1000
   batch_size: 12
   # batch_length: 20
+
 
   actor_dist: 'onehot'
   envs : 1

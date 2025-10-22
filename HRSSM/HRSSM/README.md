@@ -62,3 +62,7 @@ python -u dreamer.py --configs realistic_maniskill --task rms_turn_faucet --seed
 ## References
 
 Please cite the paper [Learning Latent Dynamic Robust Representations for World Models](https://icml.cc/virtual/2024/poster/34700) if you found the resources in the repository useful.
+
+```
+python dreamer.py --logdir ./logdir_safedreamer/SafetyPointButton1_eval --task safetygym_SafetyPointButton1-v0 --config safetygym --mode gaussian_all
+```

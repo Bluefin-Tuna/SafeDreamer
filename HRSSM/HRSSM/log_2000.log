@@ -1,7 +1,55 @@
-[2025-09-14 22:54:44] Starting training on port 2000...
-[2025-09-14 22:54:44] Training command: python -u dreamer.py --task carla_right_turn_simple --logdir ./logdir/carla_right_turn_simple --configs carla
-[2025-09-14 22:54:44] CARLA server is not running on port 2000. Starting or restarting...
-[2025-09-14 22:54:44] Waiting for CARLA server to start on port 2000...
-[2025-09-14 22:54:45] Waiting for CARLA server to start on port 2000...
-[2025-09-14 22:54:46] Waiting for CARLA server to start on port 2000...
-[2025-09-14 22:54:47] Cleaning up and exiting...
+[2025-10-21 18:39:57] Starting training on port 2000...
+[2025-10-21 18:39:57] Training command: python -u dreamer.py --task carla_four_lane --checkpoint ./logdir/carla_four_lane_bev/latest.pt --mode gaussian_proportion0.7_timestep10_1.0 
+[2025-10-21 18:39:57] CARLA server is not running on port 2000. Starting or restarting...
+[2025-10-21 18:39:57] Waiting for CARLA server to start on port 2000...
+[2025-10-21 18:39:58] Waiting for CARLA server to start on port 2000...
+[2025-10-21 18:39:59] Waiting for CARLA server to start on port 2000...
+[2025-10-21 18:40:00] CARLA server is up and running on port 2000.
+[2025-10-21 18:40:00] Training session started successfully. Logs are being written to: log_2000.log
+/home/general/anaconda3/envs/hrssm_carla/lib/python3.10/site-packages/torch/utils/_pytree.py:185: FutureWarning: optree is installed but the version is too old to support PyTorch Dynamo in C++ pytree. C++ pytree support is disabled. Please consider upgrading optree using `python3 -m pip install --upgrade 'optree>=0.13.0'`.
+  warnings.warn(
+/home/general/anaconda3/envs/hrssm_carla/lib/python3.10/site-packages/kornia/feature/lightglue.py:30: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.
+  @torch.cuda.amp.custom_fwd(cast_inputs=torch.float32)
+2025-10-21 18:40:01.938309: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2025-10-21 18:40:01.970270: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+/home/general/anaconda3/envs/hrssm_carla/lib/python3.10/site-packages/scipy/__init__.py:146: UserWarning: A NumPy version >=1.17.3 and <1.25.0 is required for this version of SciPy (detected version 1.25.2
+  warnings.warn(f"A NumPy version >={np_minversion} and <{np_maxversion}"
+2025-10-21 18:40:02.640450: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+Traceback (most recent call last):
+  File "/home/general/Documents/work/Baselines/HRSSM/HRSSM/dreamer.py", line 523, in <module>
+    main(parser.parse_args(remaining))
+  File "/home/general/Documents/work/Baselines/HRSSM/HRSSM/dreamer.py", line 324, in main
+    logdir = pathlib.Path(config.logdir).expanduser()
+  File "/home/general/anaconda3/envs/hrssm_carla/lib/python3.10/pathlib.py", line 960, in __new__
+    self = cls._from_parts(args)
+  File "/home/general/anaconda3/envs/hrssm_carla/lib/python3.10/pathlib.py", line 594, in _from_parts
+    drv, root, parts = self._parse_args(args)
+  File "/home/general/anaconda3/envs/hrssm_carla/lib/python3.10/pathlib.py", line 578, in _parse_args
+    a = os.fspath(a)
+TypeError: expected str, bytes or os.PathLike object, not NoneType
+[2025-10-21 18:41:00] Training script crashed on port 2000. Restarting...
+[2025-10-21 18:41:00] Training session started successfully. Logs are being written to: log_2000.log
+/home/general/anaconda3/envs/hrssm_carla/lib/python3.10/site-packages/torch/utils/_pytree.py:185: FutureWarning: optree is installed but the version is too old to support PyTorch Dynamo in C++ pytree. C++ pytree support is disabled. Please consider upgrading optree using `python3 -m pip install --upgrade 'optree>=0.13.0'`.
+  warnings.warn(
+/home/general/anaconda3/envs/hrssm_carla/lib/python3.10/site-packages/kornia/feature/lightglue.py:30: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.
+  @torch.cuda.amp.custom_fwd(cast_inputs=torch.float32)
+2025-10-21 18:41:02.058817: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2025-10-21 18:41:02.092418: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+/home/general/anaconda3/envs/hrssm_carla/lib/python3.10/site-packages/scipy/__init__.py:146: UserWarning: A NumPy version >=1.17.3 and <1.25.0 is required for this version of SciPy (detected version 1.25.2
+  warnings.warn(f"A NumPy version >={np_minversion} and <{np_maxversion}"
+2025-10-21 18:41:02.824470: I tensorflow/core/util/port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+Traceback (most recent call last):
+  File "/home/general/Documents/work/Baselines/HRSSM/HRSSM/dreamer.py", line 523, in <module>
+    main(parser.parse_args(remaining))
+  File "/home/general/Documents/work/Baselines/HRSSM/HRSSM/dreamer.py", line 324, in main
+    logdir = pathlib.Path(config.logdir).expanduser()
+  File "/home/general/anaconda3/envs/hrssm_carla/lib/python3.10/pathlib.py", line 960, in __new__
+    self = cls._from_parts(args)
+  File "/home/general/anaconda3/envs/hrssm_carla/lib/python3.10/pathlib.py", line 594, in _from_parts
+    drv, root, parts = self._parse_args(args)
+  File "/home/general/anaconda3/envs/hrssm_carla/lib/python3.10/pathlib.py", line 578, in _parse_args
+    a = os.fspath(a)
+TypeError: expected str, bytes or os.PathLike object, not NoneType
+[2025-10-21 18:41:04] Cleaning up and exiting...

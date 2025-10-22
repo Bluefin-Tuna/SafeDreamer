@@ -343,7 +343,7 @@ def simulate(
 
                     if len(eval_scores) >= episodes and not eval_done:
                         logger.scalar(f"eval_return", score)
-                        logger.scalar(f"eval_success", success)
+                        logger.scalar(f"episode/score", score)
                         logger.scalar(f"eval_length", length)
                         logger.scalar(f"eval_episodes", len(eval_scores))
                         logger.write(step=logger.step)

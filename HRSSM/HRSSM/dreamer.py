@@ -447,7 +447,7 @@ def main(config):
     # make sure eval will be executed once after config.steps
     test_iters = 0
     while agent._step < config.steps + config.eval_every:
-        logger.write()
+        # logger.write()
         if config.eval_episode_num > 0 or 'eval' in config.logdir:
             print("Start evaluation.")
             eval_policy = functools.partial(agent, training=False)
@@ -463,7 +463,7 @@ def main(config):
             print('Eval finished.')
             if 'eval' in config.logdir:
                 test_iters+=1
-                if test_iters == 30:
+                if test_iters == 50:
                     break
             # if config.video_pred_log:
             #     video_pred = agent._wm.video_pred(next(eval_dataset))

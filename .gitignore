@@ -5,6 +5,7 @@ __pycache__/
 
 # Logs
 log/
+logs/
 logdir/
 logdir_safedreamer/
 logdir_carla/

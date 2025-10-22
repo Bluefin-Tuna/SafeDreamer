@@ -7,6 +7,9 @@
 # python dreamer.py --logdir ./logdir_safedreamer/SafetyCarGoal1 --task safetygym_SafetyCarGoal1-v0 
 
 # python dreamer.py --logdir ./logdir_safedreamer/SafetyPointButton1_eval --task safetygym_SafetyPointButton1-v0 --config safetygym --mode gaussian_all
+export SDL_AUDIODRIVER=dummy
+export AUDIODEV=null
+# Uninstalling numpy-1.25.2:
 
 declare -A BASE_CHECKPOINTS_DEFAULT_BEV=(
   ["carla_four_lane"]="./logdir_carla/carla_four_lane/latest.pt"
@@ -20,4 +23,4 @@ GPU=0
 checkpoint=${BASE_CHECKPOINTS_DEFAULT_BEV[$scenario]}
 variant='chrome_masked_proportion0.7_timestep10_1.0'
 
-bash eval_dm3_sequential.sh  $PORT $GPU $checkpoint $variant $scenario 
+bash eval_dm3_sequential_jobs.sh  $PORT $GPU $checkpoint $variant $scenario 

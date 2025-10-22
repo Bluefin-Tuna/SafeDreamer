@@ -7,8 +7,11 @@ conda activate cardreamer
 
 # Configuration
 SCENARIOS=("carla_stop_sign" "carla_right_turn_simple" "carla_four_lane")
-AUG_TYPES=("gaussian" "jitter" "glare" "occlusion")
-AUG_LEVELS=(0.625 0.75 0.875 1.0)
+# AUG_TYPES=("gaussian" "jitter" "glare" "occlusion")
+AUG_TYPES=("gaussian")
+# AUG_TYPES=("chrome")
+# AUG_LEVELS=(0.625 0.75 0.875 1.0)
+AUG_LEVELS=(2.00 3.00 4.00 5.00) #Used to push gaussian and occlusion further
 PROPORTION_LEVELS=(0.5 0.625 0.75 0.875)
 
 # SCENARIOS=("carla_stop_sign")
@@ -70,8 +73,8 @@ for scenario in "${SCENARIOS[@]}"; do
       for proport in "${PROPORTION_LEVELS[@]}"; do
         checkpoint="${BASE_CHECKPOINTS_DEFAULT_BEV[$scenario]}"
         dir_name=$(basename "$(dirname "$checkpoint")")
-        variant="${aug}_reject20_proportion${proport}_timestep10_${level}"
-        job_name="default_${variant}_${scenario}"
+        variant="${aug}_reject5_proportion${proport}_timestep10_${level}"
+        job_name="${variant}_${scenario}"
         expected_folder="${BASE_DIR}/${dir_name}_${scenario}_${variant}"
         
         if is_folder_incomplete "$expected_folder"; then

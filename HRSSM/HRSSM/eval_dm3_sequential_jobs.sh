@@ -5,8 +5,7 @@ if [ $# -lt 2 ]; then
     echo "Usage: $0 <carla_port> <gpu_device> [additional_training_parameters]"
     exit 1
 fi
-#$PORT $GPU $checkpoint $variant $scenario
-# Configuration
+
 CARLA_PORT=$1
 GPU_DEVICE=$2
 CHECKPOINT_PATH=$3
@@ -20,74 +19,74 @@ LOG_DIR="logdir/evals_finegrained/${DIR_NAME}_${TASK}_${MODE}"
 CARLA_SERVER_COMMAND="$CARLA_ROOT/CarlaUE4.sh -RenderOffScreen -carla-port=$CARLA_PORT -benchmark -fps=10"
 TRAINING_SCRIPT="dreamer.py"
 COMMON_PARAMS="--checkpoint $CHECKPOINT_PATH --mode $MODE --logdir $LOG_DIR --task $TASK --configs carla"
-ADDITIONAL_PARAMS="${@:3}"  # Capture all additional parameters passed to the script
 TRAINING_COMMAND="python -u $TRAINING_SCRIPT $COMMON_PARAMS"
-# $ADDITIONAL_PARAMS
 
-# Clear log file before starting
-> $LOG_FILE
+> $LOG_FILE  # Clear log
 
-# Function to log messages with timestamp
 log_with_timestamp() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> $LOG_FILE
 }
 
-# Function to start or restart CARLA
 launch_carla() {
-    # Check if CARLA is running
-    if ! pgrep -f "CarlaUE4.sh -RenderOffScreen -carla-port=$CARLA_PORT -benchmark -fps=10" > /dev/null; then
-        log_with_timestamp "CARLA server is not running on port $CARLA_PORT. Starting or restarting..."
-        # Kill any existing CARLA processes on the same port
+    if ! pgrep -f "CarlaUE4.sh -RenderOffScreen -carla-port=$CARLA_PORT" > /dev/null; then
+        log_with_timestamp "CARLA not running on port $CARLA_PORT. Starting..."
         fuser -k ${CARLA_PORT}/tcp
-        # Start CARLA
+
         CUDA_VISIBLE_DEVICES=$GPU_DEVICE $CARLA_SERVER_COMMAND &
-        # Wait for CARLA to fully start
+        CARLA_PID=$!
+
+        MAX_WAIT_TIME=30  # seconds
+        WAIT_INTERVAL=2
+        ELAPSED=0
+
         while ! nc -z localhost $CARLA_PORT; do
-            log_with_timestamp "Waiting for CARLA server to start on port $CARLA_PORT..."
-            sleep 1  # delay to prevent excessive resource usage
+            if (( ELAPSED >= MAX_WAIT_TIME )); then
+                log_with_timestamp "ERROR: CARLA failed to start within ${MAX_WAIT_TIME}s. Giving up."
+                kill -TERM $CARLA_PID >/dev/null 2>&1
+                wait $CARLA_PID >/dev/null 2>&1
+                cleanup
+                exit 1
+            fi
+            log_with_timestamp "Waiting for CARLA on port $CARLA_PORT... (${ELAPSED}s elapsed)"
+            sleep $WAIT_INTERVAL
+            (( ELAPSED += WAIT_INTERVAL ))
         done
-        log_with_timestamp "CARLA server is up and running on port $CARLA_PORT."
+
+        log_with_timestamp "CARLA running on port $CARLA_PORT (started in ${ELAPSED}s)."
     fi
 }
 
-# Function to start the training script
-start_training() {
-    launch_carla
-    # Start the training script
-    $TRAINING_COMMAND >> $LOG_FILE 2>&1 &
-    TRAINING_PID=$!
-    # Log the information about the log file
-    log_with_timestamp "Training session started successfully. Logs are being written to: $LOG_FILE"
-    echo -e "\033[1;32mTraining session started successfully. Logs are being written to: $LOG_FILE\033[0m"
-}
-
-# Function to clean up processes on exit
 cleanup() {
-    log_with_timestamp "Cleaning up and exiting..."
-    # Kill CARLA process
+    log_with_timestamp "Cleaning up and releasing resources..."
     fuser -k ${CARLA_PORT}/tcp
-    # Kill the specific training process using its PID
-    kill -TERM $TRAINING_PID >/dev/null 2>&1
-    wait $TRAINING_PID >/dev/null 2>&1
-    exit
+    if [ -n "$TRAINING_PID" ]; then
+        kill -TERM $TRAINING_PID >/dev/null 2>&1
+        wait $TRAINING_PID >/dev/null 2>&1
+    fi
+    log_with_timestamp "Cleanup done. Exiting job."
+    # If under SLURM, optionally release the job:
+    if [ -n "$SLURM_JOB_ID" ]; then
+        log_with_timestamp "Releasing SLURM job $SLURM_JOB_ID."
+        scancel $SLURM_JOB_ID
+    fi
+    exit 0
 }
 
-# Trap EXIT signal to call the cleanup function
-trap cleanup SIGINT
+trap cleanup SIGINT SIGTERM EXIT
 
-# Initial start
 log_with_timestamp "Starting training on port $CARLA_PORT..."
-log_with_timestamp "Training command: $TRAINING_COMMAND"
-start_training
+launch_carla
 
-while true; do
-    # Check if the training script is still running
-    if ! pgrep -f "$TRAINING_SCRIPT" > /dev/null; then
-        log_with_timestamp "Training script crashed on port $CARLA_PORT. Restarting..."
-        start_training
-    fi
-    # Check if CARLA server needs to be restarted
-    launch_carla
-    # Check every minute
-    sleep 60
-done
+# Start training (blocking)
+log_with_timestamp "Running command: $TRAINING_COMMAND"
+CUDA_VISIBLE_DEVICES=$GPU_DEVICE $TRAINING_COMMAND >> $LOG_FILE 2>&1
+TRAIN_EXIT_CODE=$?
+
+# Cleanup and release job after Python finishes
+if [ $TRAIN_EXIT_CODE -eq 0 ]; then
+    log_with_timestamp "Training completed successfully. Cleaning up..."
+else
+    log_with_timestamp "Training exited with code $TRAIN_EXIT_CODE. Cleaning up..."
+fi
+
+cleanup

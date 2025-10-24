@@ -463,8 +463,12 @@ def main(config):
             print('Eval finished.')
             if 'eval' in config.logdir:
                 test_iters+=1
-                if test_iters == 50:
+                if test_iters == 40:
                     break
+                # if test_iters == 4 or (
+                #     os.path.exists(metrics_path)
+                #     and sum(1 for _ in open(metrics_path)) > 40
+                # ):
             # if config.video_pred_log:
             #     video_pred = agent._wm.video_pred(next(eval_dataset))
             #     logger.video("eval_openl", to_np(video_pred))
@@ -487,11 +491,12 @@ def main(config):
             # }
             # if logger.full_log:
             torch.save(agent.state_dict(), logdir / "latest.pt")
-    for env in train_envs + eval_envs:
-        try:
-            env.close()
-        except Exception:
-            pass
+    # for env in train_envs + eval_envs:
+    #     try:
+    #         env.close()
+    #     except Exception:
+    #         pass
+    return 0
 
 
 if __name__ == "__main__":
@@ -533,3 +538,5 @@ if __name__ == "__main__":
     parser.add_argument('--checkpoint',default='',type=str)
     parser.add_argument('--mode', default='', type=str)
     main(parser.parse_args(remaining))
+    
+

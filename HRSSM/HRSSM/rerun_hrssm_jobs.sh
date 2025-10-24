@@ -6,17 +6,18 @@ source ~/miniconda3/etc/profile.d/conda.sh
 conda activate hrssm_carla
 
 # Configuration
-# SCENARIOS=("carla_stop_sign" "carla_right_turn_simple" "carla_four_lane")
-SCENARIOS=("carla_stop_sign")
+SCENARIOS=("carla_stop_sign" "carla_four_lane")
+# SCENARIOS=("carla_stop_sign")
 # AUG_TYPES=("gaussian" "jitter" "glare" "occlusion")
-AUG_TYPES=("jitter")
+# AUG_TYPES=("chrome" "jitter" "glare" "occlusion")
+AUG_TYPES=("gaussian")
 
 # AUG_TYPES=("chrome")
 # AUG_LEVELS=(0.625 0.75 0.875 1.0)
-AUG_LEVELS=(1.0)
-# AUG_LEVELS=(2.00 3.00 4.00 5.00) #Used to push gaussian and occlusion further
-# PROPORTION_LEVELS=(0.5 0.625 0.75 0.875)
-PROPORTION_LEVELS=(0.875)
+# AUG_LEVELS=(1.0)
+AUG_LEVELS=(1.0 2.00 3.00 4.00 5.00) #Used to push gaussian and occlusion further
+PROPORTION_LEVELS=(0.5 0.625 0.75 0.875)
+# PROPORTION_LEVELS=(0.875)
 
 # SCENARIOS=("carla_stop_sign")
 # AUG_TYPES=("jitter")

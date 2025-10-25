@@ -8,10 +8,10 @@ conda activate cardreamer
 # Configuration
 SCENARIOS=("carla_stop_sign" "carla_right_turn_simple" "carla_four_lane")
 # AUG_TYPES=("gaussian" "jitter" "glare" "occlusion")
-AUG_TYPES=("gaussian")
-# AUG_TYPES=("chrome")
-# AUG_LEVELS=(0.625 0.75 0.875 1.0)
-AUG_LEVELS=(2.00 3.00 4.00 5.00) #Used to push gaussian and occlusion further
+# AUG_TYPES=("gaussian")
+AUG_TYPES=("chrome")
+AUG_LEVELS=(0.625 0.75 0.875 1.0)
+# AUG_LEVELS=(2.00 3.00 4.00 5.00) #Used to push gaussian and occlusion further
 PROPORTION_LEVELS=(0.5 0.625 0.75 0.875)
 
 # SCENARIOS=("carla_stop_sign")
@@ -37,7 +37,6 @@ export CARLA_ROOT="/coc/flash5/gzollicoffer3/SafeDreamer/CarDreamerRepo"
 
 mkdir -p logs
 
-# Function to check if folder is empty or missing
 is_folder_incomplete() {
     local folder=$1
     
@@ -51,11 +50,17 @@ is_folder_incomplete() {
         return 0  # True - incomplete
     fi
     
-    # Folder exists and has content - check for specific result files (optional)
-    # Uncomment and adjust if you have specific files that indicate completion
-    # if [ ! -f "$folder/metrics.jsonl" ]; then
-    #     return 0  # True - incomplete
-    # fi
+    # Check metrics.jsonl exists and has at least 30 lines
+    local metrics_file="$folder/metrics.jsonl"
+    if [ ! -f "$metrics_file" ]; then
+        return 0  # True - incomplete
+    fi
+
+    local line_count
+    line_count=$(wc -l < "$metrics_file" 2>/dev/null)
+    if [ "$line_count" -lt 30 ]; then
+        return 0  # True - incomplete
+    fi
     
     return 1  # False - complete
 }

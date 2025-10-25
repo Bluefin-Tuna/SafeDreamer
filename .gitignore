@@ -1,2 +1,8 @@
 CarDreamerRepo/logs*
 CarDreamerRepo/dreamerv3/eval.py
+CarDreamerRepo/logdir*
+*.pyc
+*.logdir
+HRSSM/HRSSM/logdir
+*.out
+*latest.pt

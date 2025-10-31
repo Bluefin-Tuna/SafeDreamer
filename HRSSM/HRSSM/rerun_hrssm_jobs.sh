@@ -7,9 +7,10 @@ conda activate hrssm_carla
 
 # Configuration
 SCENARIOS=("carla_stop_sign" "carla_four_lane")
+# SCENARIOS=("carla_right_turn_simple")
 # SCENARIOS=("carla_stop_sign")
 # AUG_TYPES=("gaussian" "jitter" "glare" "occlusion")
-# AUG_TYPES=("chrome" "jitter" "glare" "occlusion")
+# AUG_TYPES=("jitter" "glare" "occlusion")
 AUG_TYPES=("gaussian")
 
 # AUG_TYPES=("chrome")

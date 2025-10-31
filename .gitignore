@@ -20,3 +20,6 @@ CarDreamerRepo/car_dreamer/__pycache__/
 # Optional: ignore common temp and system files
 *.DS_Store
 *.swp
+
+SafeDreamer/surface_plots/
+/coc/flash5/gzollicoffer3/SafeDreamer/HRSSM/HRSSM/compute_surface_plots.py

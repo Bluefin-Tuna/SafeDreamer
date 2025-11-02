@@ -6,3 +6,4 @@ CarDreamerRepo/logdir*
 HRSSM/HRSSM/logdir
 *.out
 *latest.pt
+CarDreamerRepo/surface_plots/*

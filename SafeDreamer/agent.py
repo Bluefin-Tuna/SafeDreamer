@@ -56,6 +56,17 @@ class Agent(nj.Module):
   def train_initial(self, batch_size):
     return self.wm.initial(batch_size)
 
+  def get_recon_imgs(self, obs, posterior, prior, key='birdeye_wpt'):
+      reconstruct_prior = self.wm.heads['decoder'](prior)[key].mode()
+      reconstruct_post = self.wm.heads['decoder'](posterior)[key].mode()
+      truth = obs[key]
+      
+      return truth,  reconstruct_post, reconstruct_prior
+  
+  def get_single_recon(self, latent, key='birdeye_wpt'):
+      reconstruct = self.wm.heads['decoder'](latent)[key].mode()
+      return reconstruct
+
   def policy(self, obs, state, mode='train'):
     # print(obs.keys())
     # obs['image'] = jnp.zeros(obs['image'].shape, dtype=float)

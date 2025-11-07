@@ -15,6 +15,7 @@ BRIGHTNESS_FACTOR = 10
 class SafetyGym(embodied.Env):
 
   def __init__(self, env, platform='gpu', repeat=1, obs_key='image', render=False, size=(64, 64), camera=-1, mode='train', camera_name='vision'):
+
     # TODO: This env variable is meant for headless GPU machines but may fail
     # on CPU-only machines.
     if platform =='gpu' and 'MUJOCO_GL' not in os.environ:
@@ -42,7 +43,6 @@ class SafetyGym(embodied.Env):
     self._repeat = repeat
     self._mode = mode
     self._ts = 0
-    print(self._mode)
 
   @property
   def repeat(self):
@@ -140,13 +140,13 @@ class SafetyGym(embodied.Env):
 
     noise_intensity = 1.0
 
-    match = re.search(r'(?:^|_)timestep(\d+)(?:_|$)', self._config.mode)
+    match = re.search(r'(?:^|_)timestep(\d+)(?:_|$)', self.mode)
     if match:
         noise_timestep = int(match.group(1))
     else:
         noise_timestep = -1
 
-    match = re.search(r'(?:^|_)proportion([+-]?(?:\d+(?:\.\d*)?|\.\d+))(?:_|$)', self._config.mode)
+    match = re.search(r'(?:^|_)proportion([+-]?(?:\d+(?:\.\d*)?|\.\d+))(?:_|$)', self.mode)
     if match:
         proportion = float(match.group(1))
     else:

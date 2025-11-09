@@ -36,20 +36,15 @@ class Driver:
   def on_episode(self, callback):
     self._on_episodes.append(callback)
 
-  def __call__(self, policy, steps=0, episodes=10, lag=0.0, lag_p=0.0, lag_i=0.0, lag_d=0.0):
+  def __call__(self, policy, steps=0, episodes=10):
     step, episode = 0, 0
     while step < steps or episode < episodes:
-      step, episode = self._step(policy, step, episode, lag, lag_p, lag_i, lag_d)
+      step, episode = self._step(policy, step, episode)
 
-  def _step(self, policy, step, episode, lag, lag_p, lag_i, lag_d):
+  def _step(self, policy, step, episode):
     assert all(len(x) == len(self._env) for x in self._acts.values())
     acts = {k: v for k, v in self._acts.items() if not k.startswith('log_')}
     obs = self._env.step(acts)
-    obs['lagrange_penalty'] = lag * np.ones(len(self._env))
-    obs['lagrange_p'] = lag_p * np.ones(len(self._env))
-    obs['lagrange_i'] = lag_i * np.ones(len(self._env))
-    obs['lagrange_d'] = lag_d * np.ones(len(self._env))
-
     obs = {k: convert(v) for k, v in obs.items()}
     assert all(len(x) == len(self._env) for x in obs.values()), obs
     acts, self._state = policy(obs, self._state, **self._kwargs)

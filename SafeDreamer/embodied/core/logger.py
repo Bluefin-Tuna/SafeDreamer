@@ -225,32 +225,34 @@ class TensorBoardOutput(AsyncOutput):
       print('GIF summaries require ffmpeg in $PATH.', e)
       tf.summary.image(name, video, step)
 
-
 class WandBOutput:
-
-  def __init__(self, logdir, config, pattern=r'.*'):
+  def __init__(self, run_name, config, pattern=r".*", resume=False):
     self._pattern = re.compile(pattern)
     import wandb
     wandb.init(
-        project="safedreamer",
-        name=logdir.name,
-        id=logdir.name,
-        # sync_tensorboard=True,,
-        config=dict(config),
+      mode="online",
+      name=str(run_name),
+      entity="trolls-gt",
+      project="SafeDreamer",
+      config=dict(config),
+      resume=resume
     )
     self._wandb = wandb
 
   def __call__(self, summaries):
     bystep = collections.defaultdict(dict)
     wandb = self._wandb
+    import pdb; pdb.set_trace()
     for step, name, value in summaries:
       if len(value.shape) == 0 and self._pattern.search(name):
         bystep[step][name] = float(value)
       elif len(value.shape) == 1:
+        if 'stage' in name or 'condition' in name:
+          continue
         bystep[step][name] = wandb.Histogram(value)
       elif len(value.shape) == 2:
         value = np.clip(255 * value, 0, 255).astype(np.uint8)
-        value = np.transpose(value, [2, 0, 1])
+        # value = np.transpose(value, [2, 0, 1])
         bystep[step][name] = wandb.Image(value)
       elif len(value.shape) == 3:
         value = np.clip(255 * value, 0, 255).astype(np.uint8)
@@ -263,7 +265,7 @@ class WandBOutput:
         # If the video is a float, convert it to uint8
         if np.issubdtype(value.dtype, np.floating):
           value = np.clip(255 * value, 0, 255).astype(np.uint8)
-        bystep[step][name] = wandb.Video(value, fps=40)
+        bystep[step][name] = wandb.Video(value)
 
     for step, metrics in bystep.items():
       self._wandb.log(metrics, step=step)

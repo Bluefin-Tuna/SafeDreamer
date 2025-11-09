@@ -24,7 +24,8 @@ class SafetyGym(embodied.Env):
     import gymnasium
     import safety_gymnasium
     
-    if mode=='train':
+    print("Environment", env)
+    if mode == 'train':
       env = safety_gymnasium.make(env,render_mode='rgb_array',camera_name=camera_name, width=size[0], height=size[1])
     else:
       env = safety_gymnasium.make(env,render_mode='rgb_array',camera_name=camera_name, width=1024, height=1024)
@@ -246,7 +247,7 @@ class SafetyGym(embodied.Env):
 
     if random.random() > proportion:
       return obs
-    if noise_timestep == -1 or noise_timestep == int(self._env._env._elapsed_steps/self._repeat):
+    if noise_timestep == -1 or self._ts > noise_timestep:
       obs['high_def_nov'] = obs['image_orignal'].copy()
       for nov_key in nov_keys:
         if 'jitter' in self._mode:

@@ -24,56 +24,46 @@ import datetime
 
 def main(argv=None):
   from . import agent as agt
-
   parsed, other = embodied.Flags(configs=['defaults']).parse_known(argv)
   config = embodied.Config(agt.Agent.configs['defaults'])
-  now_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-  # config = config.update({
-  #   'task': 'safetygym_SafetyPointGoal1-v0'
-  # })
   for name in parsed.configs:
     config = config.update(agt.Agent.configs[name])
   config = embodied.Flags(config).parse(other)
-   #now_time + '_' + str(config.method) + '_' + str(config.task) + '_' + str(config.seed)
-  # logdir_algo = 'cargoal_1_standard'
-  logdir_algo = 'cargoal_1_single_dropout_less' if config.run.logdir_algo == '' else config.run.logdir_algo
-  # logdir_algo = 'cargoal_1_geigh_3'
-  print('args mode: ',config.run.mode)
-  print('args step: ',config.run.steps)
-  logdir_path = logdir_algo + '_' + config.run.mode if config.run.mode != '' else logdir_algo
+  logdir = f"{config.task}_{config.run.mode}"
   config = config.update({
-      'logdir': f'~/logdir/{logdir_path}-safedreamer'
+    'logdir': f'/home/tchopra32/Programming/safedreamer/logdir/{logdir}'
   })
   args = embodied.Config(
-      **config.run, use_cost=config.use_cost,
-      batch_steps=config.batch_size * config.batch_length, logdir=config.logdir, task=config.task)
-  print(args.steps)
+    **config.run,
+    use_cost=config.use_cost,
+    batch_steps=config.batch_size * config.batch_length,
+    logdir=config.logdir,
+    task=config.task
+  )
   os.environ['CUDA_VISIBLE_DEVICES'] = str(config.jax.logical_gpus)
-
-  logdir_path = logdir_algo + '_' + args.mode if args.mode != '' else logdir_algo
+  logdir_path = config.logdir
   logdir = embodied.Path(logdir_path)
   logdir.mkdirs()
   print('Logdir', logdir)
   step = embodied.Counter()
   logger = make_logger(parsed, logdir, step, config)
-
   cleanup = []
-  lag = PIDLagrangian(config)
+  
   try:
-
+    
     if args.script == 'train':
       replay = make_replay(config, logdir / 'replay')
       env = make_envs(config)
       cleanup.append(env)
-      agent = agt.Agent(env.obs_space, env.act_space, step, config, lag)
+      agent = agt.Agent(env.obs_space, env.act_space, step, config)
       embodied.run.train(agent, env, replay, logger, args)
-
+    
     elif args.script == 'train_save':
       replay = make_replay(config, logdir / 'replay')
       env = make_envs(config)
       cleanup.append(env)
       agent = agt.Agent(env.obs_space, env.act_space, step, config)
-      embodied.run.train_save(agent, env, replay, logger, args, lag)
+      embodied.run.train_save(agent, env, replay, logger, args)
 
     elif args.script == 'train_eval':
       replay = make_replay(config, logdir / 'replay')
@@ -83,7 +73,7 @@ def main(argv=None):
       cleanup += [env, eval_env]
       agent = agt.Agent(env.obs_space, env.act_space, step, config)
       embodied.run.train_eval(
-          agent, env, eval_env, replay, eval_replay, logger, args, lag)
+          agent, env, eval_env, replay, eval_replay, logger, args)
 
     elif args.script == 'train_holdout':
       replay = make_replay(config, logdir / 'replay')
@@ -95,23 +85,22 @@ def main(argv=None):
         eval_replay = make_replay(config, logdir / 'eval_replay', is_eval=True)
       env = make_envs(config)
       cleanup.append(env)
-      agent = agt.Agent(env.obs_space, env.act_space, step, config, lag)
+      agent = agt.Agent(env.obs_space, env.act_space, step, config)
       embodied.run.train_holdout(
           agent, env, replay, eval_replay, logger, args)
 
     elif args.script == 'eval_only':
-      env = make_envs(config, mode=args.mode)  # mode='eval'
+      env = make_envs(config, mode=args.mode)
       cleanup.append(env)
-      # env.set_mode('gaussian_image')
       agent = agt.Agent(env.obs_space, env.act_space, step, config)
-      embodied.run.eval_only(agent, env, logger, args, lag)
+      embodied.run.eval_only(agent, env, logger, args)
 
     elif args.script == 'parallel':
       assert config.run.actor_batch <= config.envs.amount, (
           config.run.actor_batch, config.envs.amount)
       step = embodied.Counter()
       env = make_env(config)
-      agent = agt.Agent(env.obs_space, env.act_space, step, config, lag)
+      agent = agt.Agent(env.obs_space, env.act_space, step, config)
       env.close()
       replay = make_replay(config, logdir / 'replay', rate_limit=True)
       embodied.run.parallel(
@@ -178,7 +167,7 @@ def make_env(config, **overrides):
   # instance here. Environments with different interfaces can be converted
   # using `embodied.envs.from_gym.FromGym` and `embodied.envs.from_dm.FromDM`.
   suite, task = config.task.split('_', 1)
-  print('TASK: ',config.task)
+  print('TASK: ', config.task)
   ctor = {
       'dummy': 'embodied.envs.dummy:Dummy',
       'gym': 'embodied.envs.from_gym:FromGym',
@@ -199,8 +188,8 @@ def make_env(config, **overrides):
     module = importlib.import_module(module)
     ctor = getattr(module, cls)
   kwargs = config.env.get(suite, {})
-  print(kwargs)
   kwargs.update(overrides)
+  print(kwargs)
   kwargs.update({'platform':config.jax.platform})
   env = ctor(task, **kwargs)
   print('ENV used: ',env)
@@ -227,137 +216,6 @@ def wrap_env(env, config):
     if not space.discrete:
       env = wrappers.ClipAction(env, name)
   return env
-
-from collections import deque
-
-import numpy as np
-# pylint: disable-next=too-few-public-methods,too-many-instance-attributes
-class PIDLagrangian():  # noqa: B024
-    """PID version of Lagrangian.
-
-    Similar to the :class:`Lagrange` module, this module implements the PID version of the
-    lagrangian method.
-
-    .. note::
-        The PID-Lagrange is more general than the Lagrange, and can be used in any policy gradient
-        algorithm. As PID_Lagrange use the PID controller to control the lagrangian multiplier, it
-        is more stable than the naive Lagrange.
-
-    Args:
-        pid_kp (float): The proportional gain of the PID controller.
-        pid_ki (float): The integral gain of the PID controller.
-        pid_kd (float): The derivative gain of the PID controller.
-        pid_d_delay (int): The delay of the derivative term.
-        pid_delta_p_ema_alpha (float): The exponential moving average alpha of the delta_p.
-        pid_delta_d_ema_alpha (float): The exponential moving average alpha of the delta_d.
-        sum_norm (bool): Whether to use the sum norm.
-        diff_norm (bool): Whether to use the diff norm.
-        penalty_max (int): The maximum penalty.
-        lagrangian_multiplier_init (float): The initial value of the lagrangian multiplier.
-        cost_limit (float): The cost limit.
-
-    References:
-        - Title: Responsive Safety in Reinforcement Learning by PID Lagrangian Methods
-        - Authors: Joshua Achiam, David Held, Aviv Tamar, Pieter Abbeel.
-        - URL: `PID Lagrange <https://arxiv.org/abs/2007.03964>`_
-    """
-
-    # pylint: disable-next=too-many-arguments
-    def __init__(
-        self,
-        config,
-    ) -> None:
-        """Initialize an instance of :class:`PIDLagrangian`."""
-        self._pid_kp: float = config.pid.kp
-        self._pid_ki: float = config.pid.ki
-        self._pid_kd: float = config.pid.kd
-        self._pid_d_delay = config.pid.d_delay
-        self._pid_delta_p_ema_alpha: float = config.pid.delta_p_ema_alpha
-        self._pid_delta_d_ema_alpha: float = config.pid.delta_d_ema_alpha
-        self._penalty_max: int = config.pid.penalty_max
-        self._sum_norm: bool = config.pid.sum_norm
-        self._diff_norm: bool = config.pid.diff_norm
-        self._pid_i: float = config.pid.lagrangian_multiplier_init
-        self._cost_ds: deque[float] = deque(maxlen=self._pid_d_delay)
-        self._cost_ds.append(0.0)
-        self._delta_p: float = 0.0
-        self._cost_d: float = 0.0
-        self._pid_d: float = 0.0
-        self._cost_limit: float = config.cost_limit
-        self._cost_penalty: float = config.pid.init_penalty
-        self._use_cost_decay: bool = config.pid.use_cost_decay
-        self._current_cost_limit: float = config.pid.init_cost_limit
-        if self._use_cost_decay:
-          self._steps = [config.pid.decay_time_step * (i + 1) for i in range(config.pid.decay_num)]
-          self._limits = [max(config.pid.init_cost_limit - i * config.pid.decay_limit_step,  config.cost_limit) for i in range(config.pid.decay_num)]
-    @property
-    def lagrange_penalty(self) -> float:
-        """The lagrangian multiplier."""
-        return self._cost_penalty
-
-    @property
-    def delta_p(self) -> float:
-        """The lagrangian multiplier p."""
-        return self._delta_p
-    @property
-    def pid_i(self) -> float:
-        """The lagrangian multiplier i."""
-        return self._pid_i
-
-    @property
-    def pid_d(self) -> float:
-        """The lagrangian multiplier d."""
-        return self._pid_d
-
-
-    def pid_update(self, epcost, step) -> None:
-        r"""Update the PID controller.
-
-        PID controller update the lagrangian multiplier following the next equation:
-
-        .. math::
-
-            \lambda_{t+1} = \lambda_t + (K_p e_p + K_i \int e_p dt + K_d \frac{d e_p}{d t}) \eta
-
-        where :math:`e_p` is the error between the current episode cost and the cost limit,
-        :math:`K_p`, :math:`K_i`, :math:`K_d` are the PID parameters, and :math:`\eta` is the
-        learning rate.
-
-        Args:
-            ep_cost_avg (float): The average cost of the current episode.
-        """
-        ep_cost_avg = epcost
-        if self._use_cost_decay:
-          for i, threshold in enumerate(self._steps):
-            if step < threshold:
-              self._current_cost_limit = self._limits[i]
-              break
-          else:
-            self._current_cost_limit = self._cost_limit
-        else:
-          self._current_cost_limit = self._cost_limit
-
-        delta = float(ep_cost_avg - self._current_cost_limit)
-        self._pid_i = max(0.0, self._pid_i + delta * self._pid_ki)
-        if self._diff_norm:
-            self._pid_i = max(0.0, min(1.0, self._pid_i))
-        a_p = self._pid_delta_p_ema_alpha
-        self._delta_p *= a_p
-        self._delta_p += (1 - a_p) * delta
-        a_d = self._pid_delta_d_ema_alpha
-        self._cost_d *= a_d
-        self._cost_d += (1 - a_d) * float(ep_cost_avg)
-        self._pid_d = max(0.0, self._cost_d - self._cost_ds[0])
-        pid_o = self._pid_kp * self._delta_p + self._pid_i + self._pid_kd * self._pid_d
-        self._cost_penalty = max(0.0, pid_o)
-        if self._diff_norm:
-            self._cost_penalty = min(1.0, self._cost_penalty)
-        if not (self._diff_norm or self._sum_norm):
-            self._cost_penalty = min(self._cost_penalty, self._penalty_max)
-        self._cost_ds.append(self._cost_d)
-        self._cost_penalty = np.clip(self._cost_penalty, 0.0, self._penalty_max)
-        return self._cost_penalty, self._pid_d, self._pid_i, self._delta_p
-
 
 if __name__ == '__main__':
   main()

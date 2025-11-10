@@ -139,7 +139,7 @@
 # echo "Running final training on SafetyPointGoal2-v0..."
 # $SCRIPT --configs osrp --method osrp --task safetygym_SafetyPointGoal2-v0 --jax.logical_gpus 0
 
-python SafeDreamer/train.py --configs osrp --method osrp --task safetygym_SafetyCarGoal1-v0 --jax.logical_gpus 0 --run.script eval_only --run.from_checkpoint /home/tchopra32/Programming/safedreamer/logdir/cargoal_1_standard_single-safedreamer/checkpoint.ckpt --run.mode clean_reject_proportion0.75_timestep10_1.0
+python SafeDreamer/train.py --configs osrp --method osrp --task safetygym_SafetyPointGoal1-v0 --jax.logical_gpus 0 --run.script eval_only --run.from_checkpoint /home/tchopra32/Programming/safedreamer/logdir/pointgoal_1_standard_single-safedreamer/checkpoint.ckpt --run.mode Default_basic_proportion0.0_timestep500_1.0
 
 # python SafeDreamer/train.py --configs osrp --method osrp --task safetygym_SafetyPointGoal1-v0 --jax.logical_gpus 0 --run.script eval_only --run.from_checkpoint /home/general/logdir/temp_geigh_3-safedreamer/checkpoint.ckpt --run.mode none_random_any
 # python SafeDreamer/train.py --configs osrp --method osrp --task safetygym_SafetyPointGoal1-v0 --jax.logical_gpus 0 --run.script eval_only --run.from_checkpoint /home/general/logdir/temp_geigh_3-safedreamer/checkpoint.ckpt --run.mode glare_random_any

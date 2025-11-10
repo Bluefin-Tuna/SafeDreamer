@@ -24,7 +24,6 @@ class SafetyGym(embodied.Env):
     import gymnasium
     import safety_gymnasium
     
-    print("Environment", env)
     if mode == 'train':
       env = safety_gymnasium.make(env,render_mode='rgb_array',camera_name=camera_name, width=size[0], height=size[1])
     else:
@@ -139,7 +138,7 @@ class SafetyGym(embodied.Env):
       else:
         nov_keys = [random.choice(available_keys)]
 
-    noise_intensity = 1.0
+    noise_intensity = 0
 
     match = re.search(r'(?:^|_)timestep(\d+)(?:_|$)', self.mode)
     if match:

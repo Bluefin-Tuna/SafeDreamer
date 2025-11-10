@@ -242,7 +242,6 @@ class WandBOutput:
   def __call__(self, summaries):
     bystep = collections.defaultdict(dict)
     wandb = self._wandb
-    import pdb; pdb.set_trace()
     for step, name, value in summaries:
       if len(value.shape) == 0 and self._pattern.search(name):
         bystep[step][name] = float(value)

@@ -9,7 +9,7 @@ np.random.seed(0)
 import re
 
 MU_FACTOR = 20
-STD_FACTOR = 20
+STD_FACTOR = 30
 BRIGHTNESS_FACTOR = 10
 
 class SafetyGym(embodied.Env):
@@ -131,14 +131,14 @@ class SafetyGym(embodied.Env):
     np.random.seed(0)
     # Add novel changes here:
     nov_key = self._mode.split('_')[-1]
-    available_keys = ['image','image2']
+    available_keys = ['image']
     if nov_key not in available_keys:
       if nov_key == 'all':
           nov_keys = available_keys
       else:
         nov_keys = [random.choice(available_keys)]
 
-    noise_intensity = 0
+    noise_intensity = 1.0
 
     match = re.search(r'(?:^|_)timestep(\d+)(?:_|$)', self.mode)
     if match:

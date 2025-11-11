@@ -314,7 +314,7 @@ class Agent(nj.Module):
 
         #Check if the image looks clean
         #||X_t - X_po||
-        tau = 0.025 #Higher tau for gaussian stopsign
+        tau = self.config.run.reject_tau #Higher tau for gaussian stopsign
         recon_score = jnp.mean(jnp.abs(obs[image_key] - reconstruct_post_dropped))
         condition = recon_score < tau
 
@@ -525,8 +525,6 @@ class Agent(nj.Module):
       outs["action"] = outs["action"].sample(seed=nj.rng())
       outs["log_entropy"] = jnp.zeros(outs["action"].shape[:1])
     
-    print(outs.keys())
-
     state = ((latent, outs["action"]), task_state, expl_state, stage, step)
     return outs, state
 

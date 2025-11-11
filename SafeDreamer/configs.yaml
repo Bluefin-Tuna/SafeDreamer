@@ -48,6 +48,7 @@ defaults:
     actor_batch: 32
     mode: ''
     logdir_algo: ''
+    reject_tau: 0.5
 
   envs: {amount: 1, parallel: process, length: 0, reset: True, restart: True, discretize: 0, checks: False}
   wrapper: {length: 0, reset: True, discretize: 0, checks: False}

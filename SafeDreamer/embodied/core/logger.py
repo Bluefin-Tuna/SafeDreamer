@@ -228,10 +228,12 @@ class TensorBoardOutput(AsyncOutput):
 class WandBOutput:
   def __init__(self, run_name, config, pattern=r".*", resume=False):
     self._pattern = re.compile(pattern)
+    name = str(run_name).split("/")[-1]
     import wandb
     wandb.init(
       mode="online",
-      name=str(run_name),
+      name=name,
+      dir=str(run_name),
       entity="trolls-gt",
       project="SafeDreamer",
       config=dict(config),

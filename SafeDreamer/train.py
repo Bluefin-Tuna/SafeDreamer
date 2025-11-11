@@ -4,6 +4,7 @@ import pathlib
 import sys
 import warnings
 from functools import partial as bind
+import re
 
 warnings.filterwarnings('ignore', '.*box bound precision lowered.*')
 warnings.filterwarnings('ignore', '.*using stateful random seeds*')
@@ -21,6 +22,27 @@ import embodied
 from embodied import wrappers
 import datetime
 
+def get_tau(name, mode):
+    match = re.search(r'reject(\d+)', mode)
+    if match:
+        n = int(match.group(1))
+        print(n)
+    else:
+        print('No reject number found...')
+        n = 1  # default if no reject number found
+    n = 1000
+    if "SafetyCarGoal" in name:
+        mean = 0.0242
+        std  = 0.0061
+    elif 'SafetyPointGoal' in name:
+        mean = 0.0247
+        std  = 0.0068
+    elif 'SafetyPointButton' in name:
+        mean = 0.0379
+        std  = 0.0095
+    else:
+        raise ValueError(f"Unknown environment name")
+    return mean + n * std
 
 def main(argv=None):
   from . import agent as agt
@@ -33,6 +55,10 @@ def main(argv=None):
   config = config.update({
     'logdir': f'/home/tchopra32/Programming/safedreamer/logdir/{logdir}'
   })
+  print(config)
+  if 'reject' in config.run.mode:
+    tau = get_tau(config.task, config.run.mode)
+    config = config.update({"run.reject_tau": tau})
   args = embodied.Config(
     **config.run,
     use_cost=config.use_cost,

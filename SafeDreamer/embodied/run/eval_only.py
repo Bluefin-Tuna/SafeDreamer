@@ -1,3 +1,7 @@
+from typing import Any
+
+
+from math import sqrt
 import re
 
 import embodied
@@ -8,7 +12,6 @@ import cv2
 import matplotlib.pyplot as plt
 import imageio
 import numpy as np
-
 
 def eval_only(agent, env, logger, args):
 
@@ -33,6 +36,12 @@ def eval_only(agent, env, logger, args):
     logger.add({"length": length, "score": score}, prefix="episode")
     print(f"Episode has {length} steps and return {score:.1f}.")
     stats = {}
+    # for key in ep:
+    #   if 'custom' in key:
+    #     stats[key] = ep[key]
+    # for key in args.log_keys_video:
+    #   if key in ep:
+    #     stats[f"policy_{key}"] = ep[key]
     custom_values = ['stages', 'condition_1', 'condition_2', 'condition_3',
              'gradients_exact', 'mu_gradients']
     def log(key, value):
@@ -46,17 +55,13 @@ def eval_only(agent, env, logger, args):
         stats[f"mean_{key}"] = value.mean()
       if re.match(args.log_keys_max, key):
         stats[f"max_{key}"] = value.max(0).mean()
-    debug_info = {
-      "stages": [],
-      "reconstruction_error_1": [],
-      "reconstruction_error_2": [],
-      "reconstruction_error_3": [], 
-    }
     for key, value in ep.items():
       if not args.log_zeros and key not in nonzeros and (value == 0).all():
         continue
       nonzeros.add(key)
       log(key, value)
+    if "stages" in ep:
+      print(ep["stages"])
     logger.add(metrics.result())
     logger.add(timer.stats(), prefix="timer")
     logger.write(fps=True)

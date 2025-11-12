@@ -39,8 +39,8 @@ class SafetyGym(embodied.Env):
     spaces = self._env.obs_space.copy()
     if self._render:
       spaces['image'] = embodied.Space(np.uint8, self._size + (3,))
-      if self._camera_name == 'vision_front_back':
-        spaces['image2'] = embodied.Space(np.uint8, self._size + (3,))
+      # if self._camera_name == 'vision_front_back':
+      #   spaces['image2'] = embodied.Space(np.uint8, self._size + (3,))
 
     return spaces
 
@@ -74,21 +74,21 @@ class SafetyGym(embodied.Env):
       if self._mode == 'train':
         image1 = self._env.task.render(width=64, height=64, mode='rgb_array', camera_name='vision', cost={})
         obs['image'] = image1
-        if self._camera_name == 'vision_front_back':
-          image2 = self._env.task.render(width=64, height=64, mode='rgb_array', camera_name='vision_back', cost={})
-          obs['image2'] = image2
+        # if self._camera_name == 'vision_front_back':
+        #   image2 = self._env.task.render(width=64, height=64, mode='rgb_array', camera_name='vision_back', cost={})
+        #   obs['image2'] = image2
       elif self._mode == 'eval':
         obs['image_orignal'] = self._env.task.render(width=1024, height=1024, mode='rgb_array', camera_name='vision', cost={})
         image = cv2.resize(
             obs['image_orignal'], self._size, interpolation=cv2.INTER_AREA)
         obs['image'] = image
-        obs['image_far'] = self._env.task.render(width=1024, height=1024, mode='rgb_array', camera_name='fixedfar', cost={'cost_sum': obs['cost']})
+        # obs['image_far'] = self._env.task.render(width=1024, height=1024, mode='rgb_array', camera_name='fixedfar', cost={'cost_sum': obs['cost']})
 
-        if self._camera_name == 'vision_front_back':
-          obs['image_orignal2'] = self._env.task.render(width=1024, height=1024, mode='rgb_array', camera_name='vision_back', cost={})
-          image2 = cv2.resize(
-              obs['image_orignal2'], self._size, interpolation=cv2.INTER_AREA)
-          obs['image2'] = image2
+        # if self._camera_name == 'vision_front_back':
+        #   obs['image_orignal2'] = self._env.task.render(width=1024, height=1024, mode='rgb_array', camera_name='vision_back', cost={})
+        #   image2 = cv2.resize(
+        #       obs['image_orignal2'], self._size, interpolation=cv2.INTER_AREA)
+        #   obs['image2'] = image2
 
     return obs
 

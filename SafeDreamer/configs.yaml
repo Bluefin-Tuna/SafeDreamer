@@ -174,8 +174,10 @@ osrp:
   .*\.mlp_units: 1024
   .*\.mlp_layers: 5
   rssm: {stoch: 48, classes: 48}
-  encoder: {mlp_keys: '.*', cnn_keys: 'image|image2'}
-  decoder: {mlp_keys: '.*', cnn_keys: 'image|image2'}
+  # encoder: {mlp_keys: '.*', cnn_keys: 'image|image2'}
+  # decoder: {mlp_keys: '.*', cnn_keys: 'image|image2'}
+  encoder: {mlp_keys: '.*', cnn_keys: 'image'}
+  decoder: {mlp_keys: '.*', cnn_keys: 'image'}
 
 osrp_lag:
   task_behavior: Greedy
@@ -206,9 +208,10 @@ osrp_lag:
   .*\.mlp_units: 1024
   .*\.mlp_layers: 5
   rssm: {stoch: 48, classes: 48}
-  encoder: {mlp_keys: '.*', cnn_keys: 'image|image2'}
-  decoder: {mlp_keys: '.*', cnn_keys: 'image|image2'}
-
+  # encoder: {mlp_keys: '.*', cnn_keys: 'image|image2'}
+  # decoder: {mlp_keys: '.*', cnn_keys: 'image|image2'}
+  encoder: {mlp_keys: '.*', cnn_keys: 'image'}
+  decoder: {mlp_keys: '.*', cnn_keys: 'image'}
 
 osrp_vector:
   task_behavior: Greedy

@@ -30,8 +30,8 @@ def main(argv=None):
   for name in parsed.configs:
     config = config.update(agt.Agent.configs[name])
   config = embodied.Flags(config).parse(other)
-  now_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-  logdir_algo = config.logdir + now_time + '_' + str(config.method) + '_' + str(config.task) + '_' + str(config.seed)
+  # now_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+  logdir_algo = config.logdir + '/' + str(config.method) + '_' + str(config.task) + '_' + str(config.seed)
   args = embodied.Config(
       **config.run, logdir=logdir_algo, use_cost=config.use_cost,
       batch_steps=config.batch_size * config.batch_length)

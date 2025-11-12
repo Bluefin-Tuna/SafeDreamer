@@ -1,0 +1,23 @@
+[project]
+name = "safedreamer"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "cloudpickle>=3.1.2",
+    "imageio>=2.37.2",
+    "matplotlib>=3.10.7",
+    "moviepy>=1.0.3",
+    "numpy>=1.23.5",
+    "opencv-python>=4.8.1.78",
+    "rich>=14.2.0",
+    "ruamel-yaml==0.17.21",
+    "safety-gymnasium",
+    "tensorflow>=2.15.0",
+    "tensorflow-probability>=0.25.0",
+    "wandb>=0.23.0",
+]
+
+[tool.uv.sources]
+safety-gymnasium = { git = "https://github.com/PKU-Alignment/safety-gymnasium" }

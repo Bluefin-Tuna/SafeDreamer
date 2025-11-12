@@ -1,0 +1,1 @@
+python /home/tchopra32/Programming/safedreamer/SafeDreamer/train.py --configs osrp --method osrp --task safetygym_SafetyPointGoal1-v0 --jax.logical_gpus 0 --logdir /home/tchopra32/Programming/safedreamer/logdir/

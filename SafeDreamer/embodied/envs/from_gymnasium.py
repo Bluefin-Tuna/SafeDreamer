@@ -60,7 +60,7 @@ class FromGymnasium(embodied.Env):
 
 
   def initial_reset(self):
-    obs, info = self._env.reset(seed=0)
+    obs, info = self._env.reset(seed=42)
     self._done = True
     self._info = None
     return self._obs(obs, 0.0, 0.0, is_first=True)
@@ -68,7 +68,7 @@ class FromGymnasium(embodied.Env):
   def step(self, action):
     if action['reset'] or self._done:
       self._done = False
-      obs, info = self._env.reset()
+      obs, info = self._env.reset(seed=42)
       return self._obs(obs, 0.0, 0.0, is_first=True)
     if self._act_dict:
       action = self._unflatten(action)

@@ -36,12 +36,12 @@ def eval_only(agent, env, logger, args):
     logger.add({"length": length, "score": score}, prefix="episode")
     print(f"Episode has {length} steps and return {score:.1f}.")
     stats = {}
-    # for key in ep:
-    #   if 'custom' in key:
-    #     stats[key] = ep[key]
-    # for key in args.log_keys_video:
-    #   if key in ep:
-    #     stats[f"policy_{key}"] = ep[key]
+    for key in ep:
+      if 'custom' in key:
+        stats[key] = ep[key]
+    for key in args.log_keys_video:
+      if key in ep:
+        stats[f"policy_{key}"] = ep[key]
     custom_values = ['stages', 'condition_1', 'condition_2', 'condition_3',
              'gradients_exact', 'mu_gradients']
     def log(key, value):

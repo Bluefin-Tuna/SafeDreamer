@@ -259,14 +259,14 @@ class WandBOutput:
         value = np.clip(255 * value, 0, 255).astype(np.uint8)
         value = np.transpose(value, [2, 0, 1])
         bystep[step][name] = wandb.Image(value)
-      elif len(value.shape) == 4:
-        # Sanity check that the channeld dimension is last
-        assert value.shape[3] in [1, 3, 4], f"Invalid shape: {value.shape}"
-        value = np.transpose(value, [0, 3, 1, 2])
-        # If the video is a float, convert it to uint8
-        if np.issubdtype(value.dtype, np.floating):
-          value = np.clip(255 * value, 0, 255).astype(np.uint8)
-        bystep[step][name] = wandb.Video(value)
+      # elif len(value.shape) == 4:
+      #   # Sanity check that the channeld dimension is last
+      #   assert value.shape[3] in [1, 3, 4], f"Invalid shape: {value.shape}"
+      #   value = np.transpose(value, [0, 3, 1, 2])
+      #   # If the video is a float, convert it to uint8
+      #   if np.issubdtype(value.dtype, np.floating):
+      #     value = np.clip(255 * value, 0, 255).astype(np.uint8)
+      #   bystep[step][name] = wandb.Video(value)
 
     for step, metrics in bystep.items():
       self._wandb.log(metrics, step=step)

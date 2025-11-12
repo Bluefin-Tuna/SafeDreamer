@@ -485,45 +485,67 @@ class Agent(nj.Module):
           reshaped[k] = v
       return reshaped
 
-    if mode == "eval":
-      outs = task_outs
-      outs["action"] = outs["action"].sample(seed=nj.rng())
-      outs["log_entropy"] = jnp.zeros(outs["action"].shape[:1])
-      surprise = lambda post, prior: self.wm.rssm.get_dist(post).kl_divergence(
-        self.wm.rssm.get_dist(prior)
-      )
-      image_key = 'image'
-      truth, reconstruct_post, prior_img  = self.get_recon_imgs(obs, latent, prior_orig, image_key)
-      video = jnp.concatenate([truth, prior_img, reconstruct_post], axis=2)
-      video = jnp.expand_dims(video, 0)
-      # metrics = {}
-      # outs.update({f"openl_{key}" : jaxutils.video_grid(video)})
-      # outs.update(jaxutils.tensorstats(surprise(latent, prior_orig), "log_surprise"))
-
-      outs = reshape_outputs(outs)
-      print({k: v.shape for k, v in outs.items()})
-
-      outs.update({f"openl_custom_{image_key}" : jaxutils.video_grid(video)})
-
-    elif mode == "explore":
+    if mode == 'eval':
+      if self.config.expl_behavior in ['CEMPlanner', 'CCEPlanner', 'PIDPlanner']:
+        outs = expl_outs
+        outs['log_entropy'] = jnp.zeros(outs['action'].shape[:1])
+      else:
+        outs = task_outs
+        outs['action'] = outs['action'].sample(seed=nj.rng())
+    elif mode == 'explore':
       outs = expl_outs
-      outs["log_entropy"] = outs["action"].entropy()
-      outs["action"] = outs["action"].sample(seed=nj.rng())
-    elif mode == "train":
-      outs = task_outs
-      outs["log_entropy"] = outs["action"].entropy()
-      outs["action"] = outs["action"].sample(seed=nj.rng())
-    else: #Run eval by default
-      outs = task_outs
-      if 'sample' in mode or 'reject' in mode:
-        video = jnp.expand_dims(video, 0)
-        outs.update({f"openl_custom_{image_key}" : jaxutils.video_grid(video)})
-        outs.update({f"stages":jnp.reshape(stage, (1,))})
-        outs.update({f"condition_1":jnp.reshape(recon_score, (1,))})
-        outs.update({f"condition_2":jnp.reshape(recon_score_2, (1,))})
-        outs.update({f"condition_3":jnp.reshape(recon_score_3, (1,))})
-      outs["action"] = outs["action"].sample(seed=nj.rng())
-      outs["log_entropy"] = jnp.zeros(outs["action"].shape[:1])
+      if self.config.expl_behavior in ['CEMPlanner', 'CCEPlanner', 'PIDPlanner']:
+        outs['log_entropy'] = jnp.zeros(outs['action'].shape[:1])
+      else:
+        outs['log_entropy'] = outs['action'].entropy()
+        outs['action'] = outs['action'].sample(seed=nj.rng())
+    elif mode == 'train':
+      if self.config.expl_behavior in ['CEMPlanner', 'CCEPlanner', 'PIDPlanner']:
+        outs = expl_outs
+        outs['log_entropy'] = jnp.zeros(outs['action'].shape[:1])
+      else:
+        outs = task_outs
+        outs['log_entropy'] = outs['action'].entropy()
+
+    # if mode == "eval":
+    #   outs = task_outs
+    #   outs["action"] = outs["action"].sample(seed=nj.rng())
+    #   outs["log_entropy"] = jnp.zeros(outs["action"].shape[:1])
+    #   surprise = lambda post, prior: self.wm.rssm.get_dist(post).kl_divergence(
+    #     self.wm.rssm.get_dist(prior)
+    #   )
+    #   image_key = 'image'
+    #   truth, reconstruct_post, prior_img  = self.get_recon_imgs(obs, latent, prior_orig, image_key)
+    #   video = jnp.concatenate([truth, prior_img, reconstruct_post], axis=2)
+    #   video = jnp.expand_dims(video, 0)
+    #   # metrics = {}
+    #   # outs.update({f"openl_{key}" : jaxutils.video_grid(video)})
+    #   # outs.update(jaxutils.tensorstats(surprise(latent, prior_orig), "log_surprise"))
+
+    #   outs = reshape_outputs(outs)
+    #   print({k: v.shape for k, v in outs.items()})
+
+    #   outs.update({f"openl_custom_{image_key}" : jaxutils.video_grid(video)})
+
+    # elif mode == "explore":
+    #   outs = expl_outs
+    #   outs["log_entropy"] = outs["action"].entropy()
+    #   outs["action"] = outs["action"].sample(seed=nj.rng())
+    # elif mode == "train":
+    #   outs = task_outs
+    #   outs["log_entropy"] = outs["action"].entropy()
+    #   outs["action"] = outs["action"].sample(seed=nj.rng())
+    # else: #Run eval by default
+    #   outs = task_outs
+    #   if 'sample' in mode or 'reject' in mode:
+    #     video = jnp.expand_dims(video, 0)
+    #     outs.update({f"openl_custom_{image_key}" : jaxutils.video_grid(video)})
+    #     outs.update({f"stages":jnp.reshape(stage, (1,))})
+    #     outs.update({f"condition_1":jnp.reshape(recon_score, (1,))})
+    #     outs.update({f"condition_2":jnp.reshape(recon_score_2, (1,))})
+    #     outs.update({f"condition_3":jnp.reshape(recon_score_3, (1,))})
+    #   outs["action"] = outs["action"].sample(seed=nj.rng())
+    #   outs["log_entropy"] = jnp.zeros(outs["action"].shape[:1])
     
     state = ((latent, outs["action"]), task_state, expl_state, stage, step)
     return outs, state

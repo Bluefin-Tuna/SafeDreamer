@@ -14,7 +14,7 @@ class Arrive:
     self.value = []
 
 def train_eval(
-    agent, train_env, eval_env, train_replay, eval_replay, logger, args, lag):
+    agent, train_env, eval_env, train_replay, eval_replay, logger, args):
   logdir = embodied.Path(args.logdir)
   logdir.mkdirs()
   print('Logdir', logdir)
@@ -59,8 +59,6 @@ def train_eval(
       logger.add({
           'cost_ema': cost_ema.value,
       }, prefix=('episode' if mode == 'train' else f'{mode}_episode'))
-      if step > 5000:
-        lag.pid_update(cost_ema.value, step)
     if 'arrive_dest' in ep.keys():
       if mode == 'train':
         train_arrive_num.value.append(int(ep['arrive_dest'][-1]))
@@ -84,9 +82,9 @@ def train_eval(
 
 
     stats = {}
-    for key in args.log_keys_video:
-      if key in ep:
-        stats[f'policy_{key}'] = ep[key]
+    # for key in args.log_keys_video:
+    #   if key in ep:
+    #     stats[f'policy_{key}'] = ep[key]
     for key, value in ep.items():
       if not args.log_zeros and key not in nonzeros and (value == 0).all():
         continue
@@ -112,10 +110,10 @@ def train_eval(
   print(args.batch_steps)
   print(args.train_fill)
   while len(train_replay) < max(args.batch_steps, args.train_fill):
-    driver_train(random_agent.policy, steps=10000, lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
+    driver_train(random_agent.policy, steps=10000)
   print('Prefill eval dataset.')
   while len(eval_replay) < max(args.batch_steps, args.eval_fill):
-    driver_eval(random_agent.policy, steps=10000, lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
+    driver_eval(random_agent.policy, steps=10000)
   logger.add(metrics.result())
   logger.write()
 
@@ -160,14 +158,12 @@ def train_eval(
   policy_train = lambda *args: agent.policy(
       *args, mode='explore' if should_expl(step) else 'train')
   policy_eval = lambda *args: agent.policy(*args, mode='eval')
-  policy_surprise = lambda *args: agent.policy(*args, mode='surprise')
-  novs = ['gaussian_image2', 'occlusion_image', 'jitter_image', 'channelswap_image']
   while step < args.steps:
     if should_eval(step):
       print('Starting evaluation at step', int(step))
       driver_eval.reset()
-      driver_eval(policy_eval, episodes=max(len(eval_env), args.eval_eps), lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
-    driver_train(policy_train, steps=100, lag=lag.lagrange_penalty, lag_p=lag.delta_p, lag_i=lag.pid_i, lag_d=lag.pid_d)
+      driver_eval(policy_eval, episodes=max(len(eval_env), args.eval_eps))
+    driver_train(policy_train, steps=100)
     if should_save(step):
       checkpoint.save()
   logger.write()

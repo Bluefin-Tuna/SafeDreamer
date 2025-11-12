@@ -32,10 +32,12 @@ class SafetyGym(embodied.Env):
     #   env = safety_gymnasium.make(env,render_mode='rgb_array',camera_name=camera_name, width=1024, height=1024)
     # elif mode=='gaussian':
     #   env = safety_gymnasium.make(env,render_mode='rgb_array',camera_name=camera_name, width=1024, height=1024)
-
+    
+    _ = env.reset(seed=42)
+    
     self._dmenv = env
     from . import from_gymnasium
-    self._env = from_gymnasium.FromGymnasium(self._dmenv,obs_key=obs_key)
+    self._env = from_gymnasium.FromGymnasium(self._dmenv, obs_key=obs_key)
     self._render = render if mode=='train' else True
     self._size = size
     self._camera = camera
@@ -57,9 +59,6 @@ class SafetyGym(embodied.Env):
     spaces = self._env.obs_space.copy()
     if self._render:
       spaces['image'] = embodied.Space(np.uint8, self._size + (3,))
-      if self._camera_name == 'vision_front_back':
-        spaces['image2'] = embodied.Space(np.uint8, self._size + (3,))
-      spaces['image3'] = embodied.Space(np.uint8, self._size + (3,))
 
     return spaces
 
@@ -102,26 +101,12 @@ class SafetyGym(embodied.Env):
       if self._mode == 'train':
         image1 = self._env.task.render(width=64, height=64, mode='rgb_array', camera_name='vision', cost={})
         obs['image'] = image1
-        if self._camera_name == 'vision_front_back':
-          image2 = self._env.task.render(width=64, height=64, mode='rgb_array', camera_name='vision_back', cost={})
-          obs['image2'] = image2
-        
-        obs['image3'] = self._env.task.render(width=64, height=64, mode='rgb_array', camera_name='fixedfar', cost={'cost_sum': obs['cost']})
-      # elif self._mode == 'eval':
+
       else:
         obs['image_orignal'] = self._env.task.render(width=1024, height=1024, mode='rgb_array', camera_name='vision', cost={})
         image = cv2.resize(
             obs['image_orignal'], self._size, interpolation=cv2.INTER_AREA)
         obs['image'] = image
-        obs['image3'] = self._env.task.render(width=1024, height=1024, mode='rgb_array', camera_name='fixedfar', cost={'cost_sum': obs['cost']})
-               
-        obs['image3']= cv2.resize(obs['image3'], self._size, interpolation=cv2.INTER_AREA)
-
-        if self._camera_name == 'vision_front_back':
-          obs['image_orignal2'] = self._env.task.render(width=1024, height=1024, mode='rgb_array', camera_name='vision_back', cost={})
-          image2 = cv2.resize(
-              obs['image_orignal2'], self._size, interpolation=cv2.INTER_AREA)
-          obs['image2'] = image2
     
     obs = self._simulate_failure(obs)
 
@@ -130,8 +115,8 @@ class SafetyGym(embodied.Env):
   def _simulate_failure(self, obs):
     np.random.seed(0)
     # Add novel changes here:
-    nov_key = self._mode.split('_')[-1]
-    available_keys = ['image']
+    nov_key = "all"
+    available_keys = ['image', "image2", "image3"]
     if nov_key not in available_keys:
       if nov_key == 'all':
           nov_keys = available_keys

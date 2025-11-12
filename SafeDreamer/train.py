@@ -30,7 +30,6 @@ def get_tau(name, mode):
     else:
         print('No reject number found...')
         n = 1  # default if no reject number found
-    n = 1000
     if "SafetyCarGoal" in name:
         mean = 0.0242
         std  = 0.0061
